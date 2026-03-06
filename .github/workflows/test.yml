@@ -1,0 +1,43 @@
+name: Test
+
+on:
+  push:
+    branches: ["*"]
+    paths:
+      - "src/**"
+      - "build.zig"
+      - "build.zig.zon"
+      - ".github/workflows/test.yml"
+  pull_request:
+    branches: ["*"]
+    paths:
+      - "src/**"
+      - "build.zig"
+      - "build.zig.zon"
+      - ".github/workflows/test.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+      - name: Install development headers
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libgtk-3-dev libwebkit2gtk-4.1-dev
+          version: 1.0
+      - name: Run tests
+        run: |
+          zig build test
+      - name: Build examples
+        run: |
+          zig build examples
+      - name: Build examples (ReleaseSafe)
+        run: |
+          zig build examples -Doptimize=ReleaseSafe
+      - name: Build examples (Cross-compile for Windows ReleaseFast)
+        run: |
+          zig build examples -Dtarget=x86_64-windows -Doptimize=ReleaseFast
