@@ -11,7 +11,7 @@ pub const c = @import("c.zig").c;
 /// defer w.destroy() catch unreachable;
 /// try w.setTitle("Hello");
 /// try w.setSize(800, 600, .none);
-/// try w.navigate("https://example.com");
+/// try w.setHtml("Thanks for using webview!");
 /// try w.run();
 /// ```
 pub const Webview = opaque {
@@ -32,7 +32,7 @@ pub const Webview = opaque {
         /// Signifies that something does not exist.
         NotFound,
     };
-    fn mapError(err: c.webview_error_t) Error!void {
+    inline fn mapError(err: c.webview_error_t) Error!void {
         switch (err) {
             c.WEBVIEW_ERROR_OK => {},
             c.WEBVIEW_ERROR_MISSING_DEPENDENCY => return Error.MissingDependency,
@@ -104,7 +104,9 @@ pub const Webview = opaque {
     /// Returns `Error.MissingDependency` if WebView2 is unavailable on Windows.
     pub fn create(debug: bool, window: ?*anyopaque) Error!*Webview {
         const w = c.webview_create(@intFromBool(debug), window);
-        return @ptrCast(w orelse return Error.Unspecified);
+        if (w == null) return Error.Unspecified;
+        if (@intFromPtr(w) < 0) return mapError(@intFromPtr(w));
+        return @ptrCast(w);
     }
 
     /// Destroys a webview instance and closes the native window.
@@ -129,10 +131,10 @@ pub const Webview = opaque {
     /// this function can be used to schedule code to execute on the main/GUI
     /// thread and thereby make that execution safe in multi-threaded applications.
     ///
-    /// See also `dispatch` and `dispatchNoContext`
+    /// See also `dispatch` and `dispatchSimple`
     pub fn dispatchRaw(
         self: *Webview,
-        comptime callback: fn (w: *Webview, arg: ?*anyopaque) void,
+        callback: fn (w: *Webview, arg: ?*anyopaque) void,
         arg: ?*anyopaque,
     ) Error!void {
         const S = struct {
@@ -153,42 +155,36 @@ pub const Webview = opaque {
     /// Schedules a function to be invoked on the thread with the run/event loop,
     /// with a typed argument.
     ///
-    /// Like `dispatchRaw`, but the callback receives a `*T` pointer instead of
-    /// `?*anyopaque`. When `T` is `void`, no argument is passed and `arg` should
-    /// be `{}`.
+    /// Like `dispatchRaw`, but the callback receives a `*T` pointer instead of `?*anyopaque`,
+    /// providing type safety for the user-provided argument.
     ///
-    /// See also `dispatchNoContext`
+    /// See also `dispatchSimple`
     pub fn dispatch(
         self: *Webview,
         comptime T: type,
-        comptime callback: DispatchCallbackType(T),
-        arg: if (T == void) void else *T,
+        callback: DispatchCallbackType(T),
+        arg: *T,
     ) Error!void {
         const S = struct {
             fn cb(w: c.webview_t, a: ?*anyopaque) callconv(.c) void {
-                if (comptime T == void) {
-                    callback(.from(w));
-                } else {
-                    callback(.from(w), @ptrCast(@alignCast(a.?)));
-                }
+                callback(.from(w), @ptrCast(@alignCast(a.?)));
             }
         };
-        return mapError(c.webview_dispatch(
-            self.ptr(),
-            S.cb,
-            if (comptime T == void) null else @ptrCast(arg),
-        ));
+        return mapError(c.webview_dispatch(self.ptr(), S.cb, @ptrCast(arg)));
     }
 
     /// Schedules a function to be invoked on the thread with the run/event loop,
     /// without a user-provided argument.
-    ///
-    /// Shorthand for `dispatch(void, callback, {})`.
-    pub inline fn dispatchNoContext(
+    pub fn dispatchSimple(
         self: *Webview,
-        comptime callback: DispatchCallbackType(void),
+        callback: DispatchCallbackType(void),
     ) Error!void {
-        return self.dispatch(void, callback, {});
+        const S = struct {
+            fn cb(w: c.webview_t, _: ?*anyopaque) callconv(.c) void {
+                callback(.from(w));
+            }
+        };
+        return mapError(c.webview_dispatch(self.ptr(), S.cb, null));
     }
 
     /// Returns the native handle of the window associated with the webview
@@ -242,7 +238,7 @@ pub const Webview = opaque {
 
     /// Injects JavaScript code to be executed immediately upon loading a page.
     /// The code will be executed before `window.onload`.
-    pub fn init(self: *Webview, js: [:0]const u8) Error!void {
+    pub fn addInitScript(self: *Webview, js: [:0]const u8) Error!void {
         return mapError(c.webview_init(self.ptr(), js.ptr));
     }
 
@@ -263,7 +259,7 @@ pub const Webview = opaque {
     /// Returns `Error.Duplicate` if a binding already exists with the
     /// specified name.
     ///
-    /// See also `bind` and `bindNoContext`
+    /// See also `bind` and `bindSimple`
     pub fn bindRaw(
         self: *Webview,
         name: [:0]const u8,
@@ -289,33 +285,23 @@ pub const Webview = opaque {
     ///
     /// Like `bindRaw`, but the callback receives a `*T` pointer instead of `?*anyopaque`,
     /// providing type safety for the user-provided argument.
-    /// When `T` is `void`, no argument is passed and `arg` should be `{}`.
     ///
     /// Returns `Error.Duplicate` if a binding already exists with the specified name.
     ///
-    /// See also `bindNoContext`
+    /// See also `bindSimple`
     pub fn bind(
         self: *Webview,
         comptime T: type,
         name: [:0]const u8,
-        comptime callback: BindCallbackType(T),
-        arg: if (T == void) void else *T,
+        callback: BindCallbackType(T),
+        arg: *T,
     ) Error!void {
         const S = struct {
             fn cb(id: [*c]const u8, req: [*c]const u8, a: ?*anyopaque) callconv(.c) void {
-                if (comptime T == void) {
-                    callback(std.mem.span(id), std.mem.span(req));
-                } else {
-                    callback(std.mem.span(id), std.mem.span(req), @ptrCast(@alignCast(a.?)));
-                }
+                callback(std.mem.span(id), std.mem.span(req), @ptrCast(@alignCast(a.?)));
             }
         };
-        return mapError(c.webview_bind(
-            self.ptr(),
-            name.ptr,
-            S.cb,
-            if (comptime T == void) null else @ptrCast(arg),
-        ));
+        return mapError(c.webview_bind(self.ptr(), name.ptr, S.cb, @ptrCast(arg)));
     }
 
     /// Binds a function to a new global JavaScript function without a user-provided argument.
@@ -323,12 +309,17 @@ pub const Webview = opaque {
     /// Shorthand for `bind(void, name, callback, {})`.
     ///
     /// Returns `Error.Duplicate` if a binding already exists with the specified name.
-    pub inline fn bindNoContext(
+    pub fn bindSimple(
         self: *Webview,
         name: [:0]const u8,
-        comptime callback: BindCallbackType(void),
+        callback: BindCallbackType(void),
     ) Error!void {
-        return self.bind(void, name, callback, {});
+        const S = struct {
+            fn cb(id: [*c]const u8, req: [*c]const u8, _: ?*anyopaque) callconv(.c) void {
+                callback(std.mem.span(id), std.mem.span(req));
+            }
+        };
+        return mapError(c.webview_bind(self.ptr(), name.ptr, S.cb, null));
     }
 
     /// Removes a binding created with `bind`.
@@ -338,7 +329,7 @@ pub const Webview = opaque {
         return mapError(c.webview_unbind(self.ptr(), name.ptr));
     }
 
-    const Status = enum(i32) {
+    pub const Status = enum(i32) {
         ok = 0,
         err = 1,
         _,

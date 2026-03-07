@@ -2,7 +2,7 @@
 
 Zig bindings for [webview/webview](https://github.com/webview/webview) — a tiny cross-platform library for building desktop applications with web technologies using a native browser widget.
 
-Zig API with error unions, comptime-powered typed callbacks, and JS ↔ Zig bindings via `bind` / `respond`.
+Idiomatic Zig API featuring error unions and comptime-powered typed callbacks.
 
 ## Requirements
 
@@ -38,7 +38,7 @@ pub fn main() !void {
     defer w.destroy() catch unreachable;
     try w.setTitle("Hello");
     try w.setSize(800, 600, .none);
-    try w.navigate("https://example.com");
+    try w.setHtml("Thanks for using webview!");
     try w.run();
 }
 ```
@@ -67,9 +67,9 @@ Cross-compilation to macOS and Windows is supported.
 Obtain a macOS SDK (e.g. via [macosx-sdks](https://github.com/joseluisq/macosx-sdks)) and pass its path with `-Dmacos-sdk`:
 
 ```sh
-zig build -Dtarget=aarch64-macos -Dmacos-sdk=/path/to/MacOSX.sdk
+zig build examples -Dtarget=aarch64-macos -Dmacos-sdk=/path/to/MacOSX.sdk
 # or for x86_64
-zig build -Dtarget=x86_64-macos -Dmacos-sdk=/path/to/MacOSX.sdk
+zig build examples -Dtarget=x86_64-macos -Dmacos-sdk=/path/to/MacOSX.sdk
 ```
 
 **Targeting Windows**
@@ -77,5 +77,31 @@ zig build -Dtarget=x86_64-macos -Dmacos-sdk=/path/to/MacOSX.sdk
 The required WebView2 headers are already bundled in `deps/WebView2/`, so no extra setup is needed:
 
 ```sh
-zig build -Dtarget=x86_64-windows
+zig build examples -Dtarget=x86_64-windows
 ```
+
+## C API to Zig API Mapping
+
+| C Function | Zig Method |
+|---|---|
+| `webview_create(debug, window)` | `Webview.create(debug, window) !*Webview` |
+| `webview_destroy(w)` | `w.destroy() !void` |
+| `webview_run(w)` | `w.run() !void` |
+| `webview_terminate(w)` | `w.terminate() !void` |
+| `webview_dispatch(w, fn, arg)` | `w.dispatchRaw(callback, arg) !void` |
+| `webview_dispatch(w, fn, arg)` | `w.dispatch(T, callback, arg) !void` |
+| `webview_dispatch(w, fn, null)` | `w.dispatchSimple(callback) !void` |
+| `webview_get_window(w)` | `w.getWindow() ?*anyopaque` |
+| `webview_get_native_handle(w, kind)` | `w.getNativeHandle(kind) ?*anyopaque` |
+| `webview_set_title(w, title)` | `w.setTitle(title) !void` |
+| `webview_set_size(w, width, height, hint)` | `w.setSize(width, height, hint) !void` |
+| `webview_navigate(w, url)` | `w.navigate(url) !void` |
+| `webview_set_html(w, html)` | `w.setHtml(html) !void` |
+| `webview_init(w, js)` | `w.addInitScript(js) !void` |
+| `webview_eval(w, js)` | `w.eval(js) !void` |
+| `webview_bind(w, name, fn, arg)` | `w.bindRaw(name, callback, arg) !void` |
+| `webview_bind(w, name, fn, arg)` | `w.bind(T, name, callback, arg) !void` |
+| `webview_bind(w, name, fn, null)` | `w.bindSimple(name, callback) !void` |
+| `webview_unbind(w, name)` | `w.unbind(name) !void` |
+| `webview_return(w, id, status, result)` | `w.respond(id, status, result) !void` |
+| `webview_version()` | `Webview.version() Version` |

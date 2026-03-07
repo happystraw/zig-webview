@@ -119,9 +119,7 @@ fn addExamplesStep(b: *std.Build, options: BuildOptions, mod: *std.Build.Module)
                 .{ .name = "webview", .module = mod },
             },
         });
-        if (options.target.result.os.tag == .macos) {
-            tryApplyMacOsSdk(b, example_mod, options);
-        }
+        tryApplyMacOsSdk(b, example_mod, options);
         const exe = b.addExecutable(.{
             .name = name,
             .root_module = example_mod,
@@ -157,8 +155,12 @@ fn createCModule(b: *std.Build, options: BuildOptions) *std.Build.Module {
     return c_mod;
 }
 
-fn tryApplyMacOsSdk(b: *std.Build, mod: *std.Build.Module, options: BuildOptions) void {
-    if (builtin.os.tag != .macos and options.macos_sdk != null) {
+/// Applies macOS SDK configuration for cross-compilation.
+///
+/// Automatically configures system include paths, library paths, and framework paths
+/// when cross-compiling for macOS from non-macOS hosts.
+pub fn tryApplyMacOsSdk(b: *std.Build, mod: *std.Build.Module, options: BuildOptions) void {
+    if (options.target.result.os.tag == .macos and builtin.os.tag != .macos and options.macos_sdk != null) {
         const macos_sdk_path: std.Build.LazyPath = .{ .cwd_relative = options.macos_sdk.? };
         mod.addSystemIncludePath(macos_sdk_path.path(b, "usr/include"));
         mod.addLibraryPath(macos_sdk_path.path(b, "usr/lib"));

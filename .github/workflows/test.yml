@@ -24,7 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
-      - name: Install development headers
+      - name: Install linux development libraries
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: libgtk-3-dev libwebkit2gtk-4.1-dev
@@ -38,6 +38,22 @@ jobs:
       - name: Build examples (ReleaseSafe)
         run: |
           zig build examples -Doptimize=ReleaseSafe
-      - name: Build examples (Cross-compile for Windows ReleaseFast)
+      - name: Build examples (Cross-compile for Windows x86_64 ReleaseFast)
         run: |
           zig build examples -Dtarget=x86_64-windows -Doptimize=ReleaseFast
+      - name: Cache macOS SDK
+        id: cache-macos-sdk
+        uses: actions/cache@v4
+        with:
+          path: MacOSX15.5.sdk
+          key: macos-sdk-15.5
+      - name: Download macOS SDK
+        if: steps.cache-macos-sdk.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://github.com/joseluisq/macosx-sdks/releases/download/15.5/MacOSX15.5.sdk.tar.xz | tar -xJ
+      - name: Build examples (Cross-compile for macOS aarch64 ReleaseFast)
+        run: |
+          zig build examples -Dtarget=aarch64-macos -Dmacos-sdk=${{ github.workspace }}/MacOSX15.5.sdk -Doptimize=ReleaseFast
+      - name: Build examples (Cross-compile for macOS x86_64 ReleaseFast)
+        run: |
+          zig build examples -Dtarget=x86_64-macos -Dmacos-sdk=${{ github.workspace }}/MacOSX15.5.sdk -Doptimize=ReleaseFast
