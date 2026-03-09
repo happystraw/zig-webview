@@ -1,0 +1,12 @@
+{
+    "name": "view",
+    "type": "module",
+    "private": true,
+    "scripts": {
+        "build": "bun build app.html --outdir dist --compile --minify --target=browser",
+        "dev": "bun app.html"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    }
+}

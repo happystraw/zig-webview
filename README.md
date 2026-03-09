@@ -49,6 +49,7 @@ pub fn main() !void {
 |---------|-------------|
 | [basic](examples/basic.zig) | Minimal window that loads an HTML string |
 | [bind](examples/bind.zig) | Counter and async compute demo using JS ↔ Zig bindings via `bind` / `respond` |
+| [skeleton](examples/skeleton/) | Project template with a Zig backend and a TypeScript frontend bundled by Bun |
 
 Build and run the bundled examples with:
 
