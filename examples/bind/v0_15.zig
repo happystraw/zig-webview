@@ -36,19 +36,29 @@ const html: [:0]const u8 =
 ;
 
 const Context = struct {
+    num: i64,
     w: *Webview,
-    count: i64,
-    mutex: std.Thread.Mutex,
-};
 
-fn count(id: [:0]const u8, req: [:0]const u8, ctx: *Context) void {
-    // req is a JSON array like "[1]" or "[-1]"; strip the brackets and parse.
-    const direction = std.fmt.parseInt(i64, req[1 .. req.len - 1], 10) catch return;
-    ctx.count += direction;
-    var buf: [32]u8 = undefined;
-    const result = std.fmt.bufPrintZ(&buf, "{d}", .{ctx.count}) catch return;
-    ctx.w.respond(id, .ok, result) catch return;
-}
+    pub fn count(self: *Context, id: [:0]const u8, req: [:0]const u8) void {
+        // req is a JSON array like "[1]" or "[-1]"; simply strip the brackets and parse the number.
+        const direction = std.fmt.parseInt(i64, req[1 .. req.len - 1], 10) catch return;
+        self.num += direction;
+        var buf: [32]u8 = undefined;
+        const result = std.fmt.bufPrintZ(&buf, "{d}", .{self.num}) catch return;
+        self.w.respond(id, .ok, result) catch return;
+    }
+
+    pub fn compute(self: *const Context, id: [:0]const u8, req: [:0]const u8) void {
+        _ = req;
+        const gpa = std.heap.page_allocator;
+        const compute_ctx = ComputeContext.create(gpa, self.w, id) catch @panic("Out of memory");
+        const thread = std.Thread.spawn(.{}, ComputeContext.compute, .{compute_ctx}) catch {
+            compute_ctx.destroy();
+            return;
+        };
+        thread.detach();
+    }
+};
 
 const ComputeContext = struct {
     w: *Webview,
@@ -70,39 +80,27 @@ const ComputeContext = struct {
         self.gpa.free(self.id);
         self.gpa.destroy(self);
     }
+
+    pub fn compute(self: *ComputeContext) void {
+        defer self.destroy();
+        // Simulate a slow computation.
+        std.Thread.sleep(1 * std.time.ns_per_s);
+        self.w.respond(self.id, .ok, "42") catch return;
+    }
 };
-
-fn doCompute(ctx: *ComputeContext) void {
-    defer ctx.destroy();
-    // Simulate a slow computation.
-    std.Thread.sleep(1 * std.time.ns_per_s);
-    ctx.w.respond(ctx.id, .ok, "42") catch return;
-}
-
-fn compute(id: [:0]const u8, req: [:0]const u8, ctx: *Context) void {
-    _ = req;
-    const allocator = std.heap.page_allocator;
-    const params = ComputeContext.create(allocator, ctx.w, id) catch @panic("Out of memory");
-    const thread = std.Thread.spawn(.{}, doCompute, .{params}) catch {
-        params.destroy();
-        return;
-    };
-    thread.detach();
-}
 
 pub fn main() !void {
     var ctx: Context = .{
         .w = undefined,
-        .count = 0,
-        .mutex = .{},
+        .num = 0,
     };
     const w = try Webview.create(false, null);
     defer w.destroy() catch unreachable;
     ctx.w = w;
     try w.setTitle("Bind Example");
     try w.setSize(480, 320, .none);
-    try w.bind(Context, "count", count, &ctx);
-    try w.bind(Context, "compute", compute, &ctx);
+    try w.bind(Context, "count", Context.count, &ctx);
+    try w.bind(Context, "compute", Context.compute, &ctx);
     try w.setHtml(html);
     try w.run();
 }

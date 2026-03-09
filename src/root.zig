@@ -148,15 +148,15 @@ pub const Webview = opaque {
     fn DispatchCallbackType(comptime T: type) type {
         return switch (T) {
             void => fn (w: *Webview) void,
-            else => fn (w: *Webview, arg: *T) void,
+            else => fn (ctx: *T, w: *Webview) void,
         };
     }
 
     /// Schedules a function to be invoked on the thread with the run/event loop,
     /// with a typed argument.
     ///
-    /// Like `dispatchRaw`, but the callback receives a `*T` pointer instead of `?*anyopaque`,
-    /// providing type safety for the user-provided argument.
+    /// Like `dispatchRaw`, but the callback signature is `fn (ctx: *T, w: *Webview) void`:
+    /// `ctx` is the first parameter (typed `*T` instead of `?*anyopaque`), followed by `w`.
     ///
     /// See also `dispatchSimple`
     pub fn dispatch(
@@ -167,7 +167,7 @@ pub const Webview = opaque {
     ) Error!void {
         const S = struct {
             fn cb(w: c.webview_t, a: ?*anyopaque) callconv(.c) void {
-                callback(.from(w), @ptrCast(@alignCast(a.?)));
+                callback(@ptrCast(@alignCast(a.?)), .from(w));
             }
         };
         return mapError(c.webview_dispatch(self.ptr(), S.cb, @ptrCast(arg)));
@@ -277,14 +277,14 @@ pub const Webview = opaque {
     fn BindCallbackType(comptime T: type) type {
         return switch (T) {
             void => fn (id: [:0]const u8, req: [:0]const u8) void,
-            else => fn (id: [:0]const u8, req: [:0]const u8, arg: *T) void,
+            else => fn (ctx: *T, id: [:0]const u8, req: [:0]const u8) void,
         };
     }
 
     /// Binds a function to a new global JavaScript function with a typed argument.
     ///
-    /// Like `bindRaw`, but the callback receives a `*T` pointer instead of `?*anyopaque`,
-    /// providing type safety for the user-provided argument.
+    /// Like `bindRaw`, but the callback signature is `fn (ctx: *T, id: [:0]const u8, req: [:0]const u8) void`:
+    /// `ctx` is the first parameter (typed `*T` instead of `?*anyopaque`), followed by `id` and `req`.
     ///
     /// Returns `Error.Duplicate` if a binding already exists with the specified name.
     ///
@@ -298,15 +298,13 @@ pub const Webview = opaque {
     ) Error!void {
         const S = struct {
             fn cb(id: [*c]const u8, req: [*c]const u8, a: ?*anyopaque) callconv(.c) void {
-                callback(std.mem.span(id), std.mem.span(req), @ptrCast(@alignCast(a.?)));
+                callback(@ptrCast(@alignCast(a.?)), std.mem.span(id), std.mem.span(req));
             }
         };
         return mapError(c.webview_bind(self.ptr(), name.ptr, S.cb, @ptrCast(arg)));
     }
 
     /// Binds a function to a new global JavaScript function without a user-provided argument.
-    ///
-    /// Shorthand for `bind(void, name, callback, {})`.
     ///
     /// Returns `Error.Duplicate` if a binding already exists with the specified name.
     pub fn bindSimple(

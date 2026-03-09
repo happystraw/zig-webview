@@ -1,11 +1,25 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const WebkitGtkVersion = enum {
+/// Supported WebKitGTK versions for linking on Linux.
+pub const WebkitGtkVersion = enum {
     @"4.0",
     @"4.1",
     @"6.0",
 };
+
+/// Applies macOS SDK configuration for cross-compilation if suitable options are provided.
+///
+/// Automatically configures system include paths, library paths, and framework paths
+/// when cross-compiling for macOS from non-macOS hosts.
+pub fn tryApplyMacOsSdk(b: *std.Build, mod: *std.Build.Module, options: BuildOptions) void {
+    if (options.target.result.os.tag == .macos and builtin.os.tag != .macos and options.macos_sdk != null) {
+        const macos_sdk_path: std.Build.LazyPath = .{ .cwd_relative = options.macos_sdk.? };
+        mod.addSystemIncludePath(macos_sdk_path.path(b, "usr/include"));
+        mod.addLibraryPath(macos_sdk_path.path(b, "usr/lib"));
+        mod.addSystemFrameworkPath(macos_sdk_path.path(b, "System/Library/Frameworks"));
+    }
+}
 
 const BuildOptions = struct {
     target: std.Build.ResolvedTarget,
@@ -31,7 +45,7 @@ pub fn build(b: *std.Build) void {
 }
 
 fn addLibrary(b: *std.Build, options: BuildOptions) *std.Build.Step.Compile {
-    const upstream = b.dependency("webview", .{});
+    const upstream = b.dependency("upstream", .{});
     const mod = b.createModule(.{
         .target = options.target,
         .optimize = options.optimize,
@@ -144,7 +158,7 @@ fn addDocStep(b: *std.Build, mod: *std.Build.Module) void {
 }
 
 fn createCModule(b: *std.Build, options: BuildOptions) *std.Build.Module {
-    const upstream = b.dependency("webview", .{});
+    const upstream = b.dependency("upstream", .{});
     const c_mod = b.addTranslateC(.{
         .root_source_file = upstream.path("core/include/webview.h"),
         .target = options.target,
@@ -153,17 +167,4 @@ fn createCModule(b: *std.Build, options: BuildOptions) *std.Build.Module {
     c_mod.addIncludePath(upstream.path("core/include"));
     c_mod.addCMacro("WEBVIEW_STATIC", "1");
     return c_mod;
-}
-
-/// Applies macOS SDK configuration for cross-compilation.
-///
-/// Automatically configures system include paths, library paths, and framework paths
-/// when cross-compiling for macOS from non-macOS hosts.
-pub fn tryApplyMacOsSdk(b: *std.Build, mod: *std.Build.Module, options: BuildOptions) void {
-    if (options.target.result.os.tag == .macos and builtin.os.tag != .macos and options.macos_sdk != null) {
-        const macos_sdk_path: std.Build.LazyPath = .{ .cwd_relative = options.macos_sdk.? };
-        mod.addSystemIncludePath(macos_sdk_path.path(b, "usr/include"));
-        mod.addLibraryPath(macos_sdk_path.path(b, "usr/lib"));
-        mod.addSystemFrameworkPath(macos_sdk_path.path(b, "System/Library/Frameworks"));
-    }
 }
