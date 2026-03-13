@@ -42,6 +42,7 @@ const Context = struct {
     w: *Webview,
     io: Io,
     gpa: std.mem.Allocator,
+    group: Io.Group,
 
     pub fn count(self: *Context, id: [:0]const u8, req: [:0]const u8) void {
         // req is a JSON array like "[1]" or "[-1]"; simply strip the brackets and parse the number.
@@ -52,63 +53,48 @@ const Context = struct {
         self.w.respond(id, .ok, result) catch return;
     }
 
-    pub fn compute(self: *const Context, id: [:0]const u8, req: [:0]const u8) void {
+    pub fn compute(self: *Context, id: [:0]const u8, req: [:0]const u8) void {
         _ = req;
-        const compute_ctx = ComputeContext.create(self.io, self.gpa, self.w, id) catch return;
-        // TODO: use new Io API?
-        const thread = std.Thread.spawn(.{}, ComputeContext.compute, .{compute_ctx}) catch {
-            compute_ctx.destroy();
+        const id_copy = self.gpa.dupeSentinel(u8, id, 0) catch return;
+        self.group.async(self.io, doCompute, .{ self, id_copy });
+    }
+
+    pub fn doCompute(self: *const Context, id: [:0]const u8) void {
+        defer self.gpa.free(id);
+        // Simulate a slow computation.
+        self.io.sleep(.fromSeconds(1), .awake) catch {
+            std.debug.print("Sleep cancelled\n", .{});
             return;
         };
-        thread.detach();
+        self.w.respond(id, .ok, "\"done\"") catch return;
     }
-};
 
-const ComputeContext = struct {
-    w: *Webview,
-    id: [:0]u8,
-    io: Io,
-    gpa: std.mem.Allocator,
-
-    pub fn create(io: Io, gpa: std.mem.Allocator, w: *Webview, id: [:0]const u8) !*ComputeContext {
-        const self = try gpa.create(ComputeContext);
-        errdefer gpa.destroy(self);
-        self.* = .{
+    pub fn init(w: *Webview, io: Io, gpa: std.mem.Allocator) Context {
+        return .{
+            .num = 0,
             .w = w,
-            .id = try gpa.dupeZ(u8, id),
             .io = io,
             .gpa = gpa,
+            .group = .init,
         };
-        return self;
     }
 
-    pub fn destroy(self: *ComputeContext) void {
-        self.gpa.free(self.id);
-        self.gpa.destroy(self);
-    }
-
-    pub fn compute(self: *ComputeContext) void {
-        defer self.destroy();
-        // Simulate a slow computation.
-        self.io.sleep(.fromSeconds(1), .awake) catch return;
-        self.w.respond(self.id, .ok, "42") catch return;
+    pub fn deinit(self: *Context) void {
+        self.group.cancel(self.io);
     }
 };
 
 pub fn main(init: std.process.Init) !void {
-    var ctx: Context = .{
-        .w = undefined,
-        .num = 0,
-        .io = init.io,
-        .gpa = init.gpa,
-    };
     const w = try Webview.create(false, null);
     defer w.destroy() catch {};
-    ctx.w = w;
-    try w.setTitle("Bind Example");
-    try w.setSize(480, 320, .none);
+
+    var ctx: Context = .init(w, init.io, init.gpa);
+    defer ctx.deinit();
     try w.bind(Context, "count", Context.count, &ctx);
     try w.bind(Context, "compute", Context.compute, &ctx);
+
+    try w.setTitle("Bind Example");
+    try w.setSize(480, 320, .none);
     try w.setHtml(html);
     try w.run();
 }

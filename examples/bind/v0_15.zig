@@ -85,7 +85,7 @@ const ComputeContext = struct {
         defer self.destroy();
         // Simulate a slow computation.
         std.Thread.sleep(1 * std.time.ns_per_s);
-        self.w.respond(self.id, .ok, "42") catch return;
+        self.w.respond(self.id, .ok, "\"done\"") catch return;
     }
 };
 
