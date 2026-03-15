@@ -348,6 +348,16 @@ pub const Webview = opaque {
         return mapError(c.webview_return(self.ptr(), id.ptr, @intFromEnum(status), result.ptr));
     }
 
+    /// Responds to a binding call with an error, rejecting the JS Promise.
+    ///
+    /// The error name is serialized as a JSON string and sent as the result.
+    /// This is a convenience wrapper around `respond` with `.err` status.
+    pub fn respondError(self: *Webview, id: [:0]const u8, err: anyerror) void {
+        var buf: [128]u8 = undefined;
+        const result = std.fmt.bufPrintZ(&buf, "\"{s}\"", .{@errorName(err)}) catch "\"ErrorOccurs\"";
+        self.respond(id, .err, result) catch {};
+    }
+
     /// Get the library's version information.
     pub fn version() Version {
         const info = c.webview_version().*;
@@ -372,6 +382,13 @@ test "checkError: known errors" {
 test "checkError: unknown code falls back to Unspecified" {
     try std.testing.expectError(error.Unspecified, Webview.mapError(c.WEBVIEW_ERROR_UNSPECIFIED));
     try std.testing.expectError(error.Unspecified, Webview.mapError(99));
+}
+
+test "version" {
+    const v = Webview.version();
+    try std.testing.expectEqual(0, v.major);
+    try std.testing.expectEqual(12, v.minor);
+    try std.testing.expectEqual(0, v.patch);
 }
 
 // TODO: more tests

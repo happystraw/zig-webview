@@ -40,22 +40,28 @@ const Context = struct {
     w: *Webview,
 
     pub fn count(self: *Context, id: [:0]const u8, req: [:0]const u8) void {
+        self.doCount(id, req) catch |err| self.w.respondError(id, err);
+    }
+
+    fn doCount(self: *Context, id: [:0]const u8, req: [:0]const u8) !void {
         // req is a JSON array like "[1]" or "[-1]"; simply strip the brackets and parse the number.
-        const direction = std.fmt.parseInt(i64, req[1 .. req.len - 1], 10) catch return;
+        const direction = try std.fmt.parseInt(i64, req[1 .. req.len - 1], 10);
         self.num += direction;
         var buf: [32]u8 = undefined;
-        const result = std.fmt.bufPrintZ(&buf, "{d}", .{self.num}) catch return;
+        const result = try std.fmt.bufPrintZ(&buf, "{d}", .{self.num});
         self.w.respond(id, .ok, result) catch return;
     }
 
     pub fn compute(self: *const Context, id: [:0]const u8, req: [:0]const u8) void {
+        self.doCompute(id, req) catch |err| self.w.respondError(id, err);
+    }
+
+    fn doCompute(self: *const Context, id: [:0]const u8, req: [:0]const u8) !void {
         _ = req;
         const gpa = std.heap.page_allocator;
-        const compute_ctx = ComputeContext.create(gpa, self.w, id) catch @panic("Out of memory");
-        const thread = std.Thread.spawn(.{}, ComputeContext.compute, .{compute_ctx}) catch {
-            compute_ctx.destroy();
-            return;
-        };
+        const compute_ctx = try ComputeContext.create(gpa, self.w, id);
+        errdefer compute_ctx.destroy();
+        const thread = try std.Thread.spawn(.{}, ComputeContext.compute, .{compute_ctx});
         thread.detach();
     }
 };
@@ -94,7 +100,7 @@ pub fn main() !void {
         .w = undefined,
         .num = 0,
     };
-    const w = try Webview.create(false, null);
+    const w = try Webview.create(true, null);
     defer w.destroy() catch unreachable;
     ctx.w = w;
     try w.setTitle("Bind Example");
