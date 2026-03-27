@@ -45,7 +45,7 @@ const Context = struct {
     group: Io.Group,
 
     pub fn count(self: *Context, id: [:0]const u8, req: [:0]const u8) void {
-        self.doCount(id, req) catch |err| self.w.respondError(id, err);
+        self.doCount(id, req) catch |err| self.w.respondError(id, err) catch {};
     }
 
     fn doCount(self: *Context, id: [:0]const u8, req: [:0]const u8) !void {
@@ -59,7 +59,7 @@ const Context = struct {
 
     pub fn compute(self: *Context, id: [:0]const u8, req: [:0]const u8) void {
         _ = req;
-        const id_copy = self.gpa.dupeSentinel(u8, id, 0) catch |err| return self.w.respondError(id, err);
+        const id_copy = self.gpa.dupeSentinel(u8, id, 0) catch |err| return self.w.respondError(id, err) catch {};
         self.group.async(self.io, doCompute, .{ self, id_copy });
     }
 

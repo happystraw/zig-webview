@@ -40,7 +40,7 @@ const Context = struct {
     w: *Webview,
 
     pub fn count(self: *Context, id: [:0]const u8, req: [:0]const u8) void {
-        self.doCount(id, req) catch |err| self.w.respondError(id, err);
+        self.doCount(id, req) catch |err| self.w.respondError(id, err) catch {};
     }
 
     fn doCount(self: *Context, id: [:0]const u8, req: [:0]const u8) !void {
@@ -53,7 +53,7 @@ const Context = struct {
     }
 
     pub fn compute(self: *const Context, id: [:0]const u8, req: [:0]const u8) void {
-        self.doCompute(id, req) catch |err| self.w.respondError(id, err);
+        self.doCompute(id, req) catch |err| self.w.respondError(id, err) catch {};
     }
 
     fn doCompute(self: *const Context, id: [:0]const u8, req: [:0]const u8) !void {

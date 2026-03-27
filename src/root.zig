@@ -352,10 +352,85 @@ pub const Webview = opaque {
     ///
     /// The error name is serialized as a JSON string and sent as the result.
     /// This is a convenience wrapper around `respond` with `.err` status.
-    pub fn respondError(self: *Webview, id: [:0]const u8, err: anyerror) void {
+    pub fn respondError(self: *Webview, id: [:0]const u8, err: anyerror) Error!void {
         var buf: [128]u8 = undefined;
         const result = std.fmt.bufPrintZ(&buf, "\"{s}\"", .{@errorName(err)}) catch "\"ErrorOccurs\"";
-        self.respond(id, .err, result) catch {};
+        return self.respond(id, .err, result);
+    }
+
+    /// Responds to a binding call with ok and no return value, resolving the JS Promise with `undefined`.
+    ///
+    /// Convenience wrapper around `respond` for void bindings.
+    pub fn respondOk(self: *Webview, id: [:0]const u8) Error!void {
+        return self.respond(id, .ok, "");
+    }
+
+    /// Maximizes the native window.
+    pub fn maximize(self: *Webview) Error!void {
+        return mapError(c.webview_window_maximize(self.ptr()));
+    }
+
+    /// Unmaximizes the native window.
+    pub fn unmaximize(self: *Webview) Error!void {
+        return mapError(c.webview_window_unmaximize(self.ptr()));
+    }
+
+    /// Minimizes the native window.
+    pub fn minimize(self: *Webview) Error!void {
+        return mapError(c.webview_window_minimize(self.ptr()));
+    }
+
+    /// Unminimizes the native window.
+    pub fn unminimize(self: *Webview) Error!void {
+        return mapError(c.webview_window_unminimize(self.ptr()));
+    }
+
+    /// Enters fullscreen mode.
+    pub fn fullscreen(self: *Webview) Error!void {
+        return mapError(c.webview_window_fullscreen(self.ptr()));
+    }
+
+    /// Exits fullscreen mode.
+    pub fn unfullscreen(self: *Webview) Error!void {
+        return mapError(c.webview_window_unfullscreen(self.ptr()));
+    }
+
+    /// Hides the native window.
+    pub fn hide(self: *Webview) Error!void {
+        return mapError(c.webview_window_hide(self.ptr()));
+    }
+
+    /// Shows the native window.
+    pub fn show(self: *Webview) Error!void {
+        return mapError(c.webview_window_show(self.ptr()));
+    }
+
+    /// Returns whether the native window is in fullscreen mode.
+    pub fn isFullscreen(self: *Webview) Error!bool {
+        var result: c_int = 0;
+        try mapError(c.webview_window_is_fullscreen(self.ptr(), &result));
+        return result != 0;
+    }
+
+    /// Returns whether the native window is maximized.
+    pub fn isMaximized(self: *Webview) Error!bool {
+        var result: c_int = 0;
+        try mapError(c.webview_window_is_maximized(self.ptr(), &result));
+        return result != 0;
+    }
+
+    /// Returns whether the native window is minimized.
+    pub fn isMinimized(self: *Webview) Error!bool {
+        var result: c_int = 0;
+        try mapError(c.webview_window_is_minimized(self.ptr(), &result));
+        return result != 0;
+    }
+
+    /// Returns whether the native window is visible.
+    pub fn isVisible(self: *Webview) Error!bool {
+        var result: c_int = 0;
+        try mapError(c.webview_window_is_visible(self.ptr(), &result));
+        return result != 0;
     }
 
     /// Get the library's version information.

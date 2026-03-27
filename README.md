@@ -2,6 +2,8 @@
 
 Zig bindings for [webview/webview](https://github.com/webview/webview) — a tiny cross-platform library for building desktop applications with web technologies using a native browser widget.
 
+Also includes cross-platform [window control](#window-control-methods) such as maximize, minimize, fullscreen, hide/show and state queries.
+
 Idiomatic Zig API featuring error unions and comptime-powered typed callbacks.
 
 ## Requirements
@@ -49,6 +51,7 @@ pub fn main() !void {
 |---------|-------------|
 | [basic](examples/basic.zig) | Minimal window that loads an HTML string |
 | [bind](examples/bind.zig) | Counter and async compute demo using JS ↔ Zig bindings via `bind` / `respond` |
+| [window](examples/window.zig) | Window state controls demo (maximize, minimize, fullscreen, hide/show) |
 | [skeleton](examples/skeleton/) | Project template with a Zig backend and a TypeScript frontend bundled by Bun |
 
 Build and run the bundled examples with:
@@ -57,6 +60,7 @@ Build and run the bundled examples with:
 zig build examples
 ./zig-out/bin/basic
 ./zig-out/bin/bind
+./zig-out/bin/window
 ```
 
 ## Cross-compilation
@@ -105,4 +109,23 @@ zig build examples -Dtarget=x86_64-windows
 | `webview_bind(w, name, fn, null)` | `w.bindSimple(name, callback) !void` |
 | `webview_unbind(w, name)` | `w.unbind(name) !void` |
 | `webview_return(w, id, status, result)` | `w.respond(id, status, result) !void` |
+| — | `w.respondOk(id) !void` |
+| — | `w.respondError(id, err) !void` |
 | `webview_version()` | `Webview.version() Version` |
+
+## Window Control Methods
+
+| Method | Description |
+|--------|-------------|
+| `w.maximize() !void` | Maximize the window |
+| `w.unmaximize() !void` | Restore the window from maximized state |
+| `w.minimize() !void` | Minimize the window |
+| `w.unminimize() !void` | Restore the window from minimized state |
+| `w.fullscreen() !void` | Enter fullscreen mode |
+| `w.unfullscreen() !void` | Exit fullscreen mode |
+| `w.hide() !void` | Hide the window |
+| `w.show() !void` | Show the window |
+| `w.isMaximized() !bool` | Query whether the window is maximized |
+| `w.isMinimized() !bool` | Query whether the window is minimized |
+| `w.isFullscreen() !bool` | Query whether the window is in fullscreen mode |
+| `w.isVisible() !bool` | Query whether the window is visible |

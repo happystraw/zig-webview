@@ -52,10 +52,12 @@ fn addLibrary(b: *std.Build, options: BuildOptions) *std.Build.Step.Compile {
         .link_libcpp = true,
     });
     mod.addIncludePath(upstream.path("core/include"));
+    mod.addIncludePath(b.path("c"));
     mod.addCMacro("WEBVIEW_STATIC", "1");
+    mod.addCSourceFile(.{ .file = b.path("c/webview/window.c"), .flags = &.{} });
     switch (options.target.result.os.tag) {
         .windows => {
-            mod.addCSourceFile(.{ .file = upstream.path("core/src/webview.cc"), .flags = &.{"-std=c++14"} });
+            mod.addCSourceFile(.{ .file = b.path("c/webview.cc"), .flags = &.{"-std=c++14"} });
             mod.addIncludePath(b.path("deps/WebView2/"));
             mod.linkSystemLibrary("advapi32", .{});
             mod.linkSystemLibrary("ole32", .{});
@@ -66,11 +68,11 @@ fn addLibrary(b: *std.Build, options: BuildOptions) *std.Build.Step.Compile {
         },
         .macos => {
             tryApplyMacOsSdk(b, mod, options);
-            mod.addCSourceFile(.{ .file = upstream.path("core/src/webview.cc"), .flags = &.{"-std=c++11"} });
+            mod.addCSourceFile(.{ .file = b.path("c/webview.cc"), .flags = &.{"-std=c++11"} });
             mod.linkFramework("WebKit", .{});
         },
         .linux => {
-            mod.addCSourceFile(.{ .file = upstream.path("core/src/webview.cc"), .flags = &.{"-std=c++11"} });
+            mod.addCSourceFile(.{ .file = b.path("c/webview.cc"), .flags = &.{"-std=c++11"} });
             switch (options.webkitgtk) {
                 .@"4.0" => {
                     mod.linkSystemLibrary("gtk+-3.0", .{});
@@ -98,7 +100,7 @@ fn addLibrary(b: *std.Build, options: BuildOptions) *std.Build.Step.Compile {
 }
 
 fn addModule(b: *std.Build, options: BuildOptions, lib: *std.Build.Step.Compile) *std.Build.Module {
-    const webview_c = createCModule(b, options);
+    const webview_c = addCBindings(b, options);
     const mod = b.addModule("webview", .{
         .root_source_file = b.path("src/root.zig"),
         .target = options.target,
@@ -123,6 +125,7 @@ fn addExamplesStep(b: *std.Build, options: BuildOptions, mod: *std.Build.Module)
     const examples = [_][]const u8{
         "basic",
         "bind",
+        "window",
     };
     inline for (examples) |name| {
         const example_mod = b.createModule(.{
@@ -157,14 +160,15 @@ fn addDocStep(b: *std.Build, mod: *std.Build.Module) void {
     doc_step.dependOn(&install_doc.step);
 }
 
-fn createCModule(b: *std.Build, options: BuildOptions) *std.Build.Module {
+fn addCBindings(b: *std.Build, options: BuildOptions) *std.Build.Module {
     const upstream = b.dependency("upstream", .{});
-    const c_mod = b.addTranslateC(.{
-        .root_source_file = upstream.path("core/include/webview.h"),
+    const translate = b.addTranslateC(.{
+        .root_source_file = b.path("c/webview/all.h"),
         .target = options.target,
         .optimize = options.optimize,
-    }).createModule();
-    c_mod.addIncludePath(upstream.path("core/include"));
-    c_mod.addCMacro("WEBVIEW_STATIC", "1");
-    return c_mod;
+    });
+    translate.addIncludePath(upstream.path("core/include"));
+    translate.addIncludePath(b.path("c"));
+    translate.defineCMacro("WEBVIEW_STATIC", "1");
+    return translate.createModule();
 }
