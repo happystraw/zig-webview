@@ -39,8 +39,14 @@ const Context = struct {
     num: i64,
     w: *Webview,
 
+    fn respondError(self: *const Context, id: [:0]const u8, err: anyerror) !void {
+        var buf: [128]u8 = undefined;
+        const result = try std.fmt.bufPrintZ(&buf, "\"{s}\"", .{@errorName(err)});
+        try self.w.respond(id, .err, result);
+    }
+
     pub fn count(self: *Context, id: [:0]const u8, req: [:0]const u8) void {
-        self.doCount(id, req) catch |err| self.w.respondError(id, err) catch {};
+        self.doCount(id, req) catch |err| self.respondError(id, err) catch {};
     }
 
     fn doCount(self: *Context, id: [:0]const u8, req: [:0]const u8) !void {
@@ -53,7 +59,7 @@ const Context = struct {
     }
 
     pub fn compute(self: *const Context, id: [:0]const u8, req: [:0]const u8) void {
-        self.doCompute(id, req) catch |err| self.w.respondError(id, err) catch {};
+        self.doCompute(id, req) catch |err| self.respondError(id, err) catch {};
     }
 
     fn doCompute(self: *const Context, id: [:0]const u8, req: [:0]const u8) !void {

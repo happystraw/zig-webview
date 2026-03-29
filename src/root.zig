@@ -161,9 +161,9 @@ pub const Webview = opaque {
     /// See also `dispatchSimple`
     pub fn dispatch(
         self: *Webview,
-        comptime T: type,
-        callback: DispatchCallbackType(T),
-        arg: *T,
+        comptime ArgType: type,
+        callback: DispatchCallbackType(ArgType),
+        arg: *ArgType,
     ) Error!void {
         const S = struct {
             fn cb(w: c.webview_t, a: ?*anyopaque) callconv(.c) void {
@@ -348,23 +348,6 @@ pub const Webview = opaque {
         return mapError(c.webview_return(self.ptr(), id.ptr, @intFromEnum(status), result.ptr));
     }
 
-    /// Responds to a binding call with an error, rejecting the JS Promise.
-    ///
-    /// The error name is serialized as a JSON string and sent as the result.
-    /// This is a convenience wrapper around `respond` with `.err` status.
-    pub fn respondError(self: *Webview, id: [:0]const u8, err: anyerror) Error!void {
-        var buf: [128]u8 = undefined;
-        const result = std.fmt.bufPrintZ(&buf, "\"{s}\"", .{@errorName(err)}) catch "\"ErrorOccurs\"";
-        return self.respond(id, .err, result);
-    }
-
-    /// Responds to a binding call with ok and no return value, resolving the JS Promise with `undefined`.
-    ///
-    /// Convenience wrapper around `respond` for void bindings.
-    pub fn respondOk(self: *Webview, id: [:0]const u8) Error!void {
-        return self.respond(id, .ok, "");
-    }
-
     /// Maximizes the native window.
     pub fn maximize(self: *Webview) Error!void {
         return mapError(c.webview_window_maximize(self.ptr()));
@@ -440,6 +423,228 @@ pub const Webview = opaque {
             .major = info.version.major,
             .minor = info.version.minor,
             .patch = info.version.patch,
+        };
+    }
+
+    /// A convenience wrapper around `*Webview` that pairs it with a typed context `*T`.
+    ///
+    /// Forwards all webview methods and enhances `bind` to accept methods of `T`
+    /// with signature `fn(*T, ...) anyerror!void`, automatically calling `reject`
+    /// on error instead of propagating it to the caller.
+    /// ```
+    pub fn Easy(comptime T: type) type {
+        return struct {
+            const Self = @This();
+
+            pub const Options = struct {
+                devtools: bool,
+                window: ?*anyopaque,
+
+                pub const release: Options = .{ .devtools = false, .window = null };
+                pub const debug: Options = .{ .devtools = true, .window = null };
+            };
+
+            pub const Request = struct {
+                /// The identifier of the binding call.
+                id: [:0]const u8,
+                /// Raw JSON array of JS arguments, e.g. `"[1]"` or `"[\"hello\"]"`.
+                args: [:0]const u8,
+                easy: *Self,
+
+                pub fn resolve(self: Request) void {
+                    self.easy.resolve(self.id);
+                }
+                pub fn resolveWith(self: Request, result: [:0]const u8) void {
+                    self.easy.resolveWith(self.id, result);
+                }
+                pub fn reject(self: Request, result: [:0]const u8) void {
+                    self.easy.reject(self.id, result);
+                }
+                pub fn rejectError(self: Request, err: anyerror) void {
+                    self.easy.rejectError(self.id, err);
+                }
+            };
+
+            w: *Webview,
+            ctx: *T,
+
+            pub fn init(ctx: *T, options: Options) Error!Self {
+                return .{
+                    .w = try .create(options.devtools, options.window),
+                    .ctx = ctx,
+                };
+            }
+
+            pub fn deinit(self: *Self) void {
+                self.w.destroy() catch |err| {
+                    std.log.scoped(.webview).err("destroy failed: {s}", .{@errorName(err)});
+                };
+            }
+
+            // ── Wrapped methods ───────────────────────────────────────────────
+            // Wraps `T` methods with error handling; errors are forwarded to JS.
+
+            /// Binds a method of `T` to a JS function named after its declaration.
+            ///
+            /// The method must have the signature:
+            ///   `fn (self: *T, req: Easy.Request) void | anyerror!void`
+            ///
+            /// `req.args` is a JSON array of the arguments passed from JS.
+            /// Returned errors are caught and forwarded to JS via `reject`.
+            ///
+            /// The method is responsible for settling the JS Promise via `req`:
+            ///   - `req.resolve()`              — fulfill with `undefined`
+            ///   - `req.resolveWith(json)`      — fulfill with a valid JSON value string
+            ///   - `req.reject(msg)`            — reject with a valid JSON value string or `""`
+            ///   - `req.rejectError(err)`       — reject with an error name
+            /// Omitting a settle call leaves the Promise permanently pending.
+            pub fn bind(self: *Self, comptime function: std.meta.DeclEnum(T)) Error!void {
+                try bindAs(self, @tagName(function), function);
+            }
+
+            /// Like `bind`, but registers the method under a custom JS name.
+            pub fn bindAs(self: *Self, name: [:0]const u8, comptime function: std.meta.DeclEnum(T)) Error!void {
+                const cb = @field(T, @tagName(function));
+                const HandleError = struct {
+                    pub fn start(easy: *Self, id: [:0]const u8, req: [:0]const u8) void {
+                        @as(anyerror!void, cb(easy.ctx, .{ .id = id, .args = req, .easy = easy })) catch |err| {
+                            easy.rejectError(id, err);
+                        };
+                    }
+                };
+                try self.w.bind(Self, name, HandleError.start, self);
+            }
+
+            /// Binds an arbitrary function to a JS function with the given name.
+            ///
+            /// Unlike `bind`/`bindAs`, the callback is not required to be a method of `T`:
+            ///   `fn (req: Easy.Request) void | anyerror!void`
+            ///
+            /// Returned errors are caught and forwarded to JS via `reject`.
+            /// See `bind` for Promise settling semantics.
+            pub fn bindFn(self: *Self, name: [:0]const u8, callback: anytype) Error!void {
+                const HandleError = struct {
+                    pub fn start(easy: *Self, id: [:0]const u8, req: [:0]const u8) void {
+                        @as(anyerror!void, callback(.{ .id = id, .args = req, .easy = easy })) catch |err| {
+                            easy.rejectError(id, err);
+                        };
+                    }
+                };
+                try self.w.bind(Self, name, HandleError.start, self);
+            }
+
+            /// Responds to a JS binding call. Errors are logged via `log.err`.
+            pub fn respond(self: *Self, id: [:0]const u8, status: Status, result: [:0]const u8) void {
+                self.w.respond(id, status, result) catch |err| {
+                    std.log.scoped(.webview).err("respond failed for request {s} (status={d}, result={s}): {s}", .{ id, @intFromEnum(status), result, @errorName(err) });
+                };
+            }
+
+            /// Resolves a JS binding call with `undefined`. Errors are logged via `log.err`.
+            pub fn resolve(self: *Self, id: [:0]const u8) void {
+                self.respond(id, .ok, "");
+            }
+
+            /// Resolves a JS binding call with a custom JSON value.
+            /// `result` must be a valid JSON value or `""`.
+            /// Errors are logged via `log.err`.
+            pub fn resolveWith(self: *Self, id: [:0]const u8, result: [:0]const u8) void {
+                self.respond(id, .ok, result);
+            }
+
+            /// Rejects a JS binding call with a custom result.
+            /// `result` must be a valid JSON value or `""`.
+            /// Errors are logged via `log.err`.
+            pub fn reject(self: *Self, id: [:0]const u8, result: [:0]const u8) void {
+                self.respond(id, .err, result);
+            }
+
+            /// Rejects a JS binding call with an error, serializing its name as a JSON string.
+            /// Errors are logged via `log.err`.
+            pub fn rejectError(self: *Self, id: [:0]const u8, err: anyerror) void {
+                var buf: [128]u8 = undefined;
+                const result = std.fmt.bufPrintZ(&buf, "\"{s}\"", .{@errorName(err)}) catch "\"Error occurred\"";
+                self.respond(id, .err, result);
+            }
+
+            // ── Forwarded methods ────────────────────────────────────────────
+            // Direct wrappers around `*Webview`; errors are returned to the caller.
+
+            pub fn run(self: *Self) Error!void {
+                return self.w.run();
+            }
+            pub fn terminate(self: *Self) Error!void {
+                return self.w.terminate();
+            }
+            pub fn getWindow(self: *Self) ?*anyopaque {
+                return self.w.getWindow();
+            }
+            pub fn getNativeHandle(self: *Self, comptime kind: NativeHandleKind) ?*anyopaque {
+                return self.w.getNativeHandle(kind);
+            }
+            pub fn setTitle(self: *Self, title: [:0]const u8) Error!void {
+                return self.w.setTitle(title);
+            }
+            pub fn setSize(self: *Self, width: i32, height: i32, hint: Hint) Error!void {
+                return self.w.setSize(width, height, hint);
+            }
+            pub fn navigate(self: *Self, url: [:0]const u8) Error!void {
+                return self.w.navigate(url);
+            }
+            pub fn setHtml(self: *Self, html: [:0]const u8) Error!void {
+                return self.w.setHtml(html);
+            }
+            pub fn addInitScript(self: *Self, js: [:0]const u8) Error!void {
+                return self.w.addInitScript(js);
+            }
+            pub fn eval(self: *Self, js: [:0]const u8) Error!void {
+                return self.w.eval(js);
+            }
+            pub fn unbind(self: *Self, name: [:0]const u8) Error!void {
+                return self.w.unbind(name);
+            }
+            pub fn dispatch(self: *Self, comptime ArgType: type, callback: DispatchCallbackType(ArgType), arg: *ArgType) Error!void {
+                return self.w.dispatch(ArgType, callback, arg);
+            }
+            pub fn dispatchSimple(self: *Self, callback: DispatchCallbackType(void)) Error!void {
+                return self.w.dispatchSimple(callback);
+            }
+            pub fn maximize(self: *Self) Error!void {
+                return self.w.maximize();
+            }
+            pub fn unmaximize(self: *Self) Error!void {
+                return self.w.unmaximize();
+            }
+            pub fn minimize(self: *Self) Error!void {
+                return self.w.minimize();
+            }
+            pub fn unminimize(self: *Self) Error!void {
+                return self.w.unminimize();
+            }
+            pub fn fullscreen(self: *Self) Error!void {
+                return self.w.fullscreen();
+            }
+            pub fn unfullscreen(self: *Self) Error!void {
+                return self.w.unfullscreen();
+            }
+            pub fn hide(self: *Self) Error!void {
+                return self.w.hide();
+            }
+            pub fn show(self: *Self) Error!void {
+                return self.w.show();
+            }
+            pub fn isFullscreen(self: *Self) Error!bool {
+                return self.w.isFullscreen();
+            }
+            pub fn isMaximized(self: *Self) Error!bool {
+                return self.w.isMaximized();
+            }
+            pub fn isMinimized(self: *Self) Error!bool {
+                return self.w.isMinimized();
+            }
+            pub fn isVisible(self: *Self) Error!bool {
+                return self.w.isVisible();
+            }
         };
     }
 };

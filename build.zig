@@ -125,6 +125,7 @@ fn addExamplesStep(b: *std.Build, options: BuildOptions, mod: *std.Build.Module)
     const examples = [_][]const u8{
         "basic",
         "bind",
+        "easy",
         "window",
     };
     inline for (examples) |name| {

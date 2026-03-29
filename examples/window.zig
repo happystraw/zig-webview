@@ -35,76 +35,76 @@ const html: [:0]const u8 =
     \\</script>
 ;
 
-const Context = struct {
-    w: *Webview,
+const Easy = Webview.Easy(Context);
 
-    pub fn maximize(self: *Context, id: [:0]const u8, _: [:0]const u8) void {
-        self.w.maximize() catch {};
-        self.w.respondOk(id) catch {};
+const Context = struct {
+    pub fn maximize(_: *Context, req: Easy.Request) !void {
+        try req.easy.maximize();
+        req.resolve();
     }
-    pub fn unmaximize(self: *Context, id: [:0]const u8, _: [:0]const u8) void {
-        self.w.unmaximize() catch {};
-        self.w.respondOk(id) catch {};
+    pub fn unmaximize(_: *Context, req: Easy.Request) !void {
+        try req.easy.unmaximize();
+        req.resolve();
     }
-    pub fn minimize(self: *Context, id: [:0]const u8, _: [:0]const u8) void {
-        self.w.minimize() catch {};
-        self.w.respondOk(id) catch {};
+    pub fn minimize(_: *Context, req: Easy.Request) !void {
+        try req.easy.minimize();
+        req.resolve();
     }
-    pub fn unminimize(self: *Context, id: [:0]const u8, _: [:0]const u8) void {
-        self.w.unminimize() catch {};
-        self.w.respondOk(id) catch {};
+    pub fn unminimize(_: *Context, req: Easy.Request) !void {
+        try req.easy.unminimize();
+        req.resolve();
     }
-    pub fn fullscreen(self: *Context, id: [:0]const u8, _: [:0]const u8) void {
-        self.w.fullscreen() catch {};
-        self.w.respondOk(id) catch {};
+    pub fn fullscreen(_: *Context, req: Easy.Request) !void {
+        try req.easy.fullscreen();
+        req.resolve();
     }
-    pub fn unfullscreen(self: *Context, id: [:0]const u8, _: [:0]const u8) void {
-        self.w.unfullscreen() catch {};
-        self.w.respondOk(id) catch {};
+    pub fn unfullscreen(_: *Context, req: Easy.Request) !void {
+        try req.easy.unfullscreen();
+        req.resolve();
     }
-    pub fn hide(self: *Context, id: [:0]const u8, _: [:0]const u8) void {
-        self.w.hide() catch {};
-        self.w.respondOk(id) catch {};
+    pub fn hide(_: *Context, req: Easy.Request) !void {
+        try req.easy.hide();
+        req.resolve();
     }
-    pub fn show(self: *Context, id: [:0]const u8, _: [:0]const u8) void {
-        self.w.show() catch {};
-        self.w.respondOk(id) catch {};
+    pub fn show(_: *Context, req: Easy.Request) !void {
+        try req.easy.show();
+        req.resolve();
     }
-    pub fn getState(self: *Context, id: [:0]const u8, _: [:0]const u8) void {
-        const maximized = self.w.isMaximized() catch false;
-        const minimized = self.w.isMinimized() catch false;
-        const fs = self.w.isFullscreen() catch false;
-        const visible = self.w.isVisible() catch false;
+    pub fn getState(_: *Context, req: Easy.Request) !void {
+        const maximized = try req.easy.isMaximized();
+        const minimized = try req.easy.isMinimized();
+        const fs = try req.easy.isFullscreen();
+        const visible = try req.easy.isVisible();
         var buf: [128]u8 = undefined;
-        const result = std.fmt.bufPrintZ(&buf,
+        const result = try std.fmt.bufPrintZ(&buf,
             \\{{"maximized":{s},"minimized":{s},"fullscreen":{s},"visible":{s}}}
         , .{
             if (maximized) "true" else "false",
             if (minimized) "true" else "false",
             if (fs) "true" else "false",
             if (visible) "true" else "false",
-        }) catch return;
-        self.w.respond(id, .ok, result) catch {};
+        });
+        req.resolveWith(result);
     }
 };
 
 pub fn main() !void {
-    const w = try Webview.create(true, null);
-    defer w.destroy() catch {};
+    var ctx: Context = .{};
+    var easy: Easy = try .init(&ctx, .debug);
+    defer easy.deinit();
 
-    var ctx: Context = .{ .w = w };
-    try w.bind(Context, "maximize", Context.maximize, &ctx);
-    try w.bind(Context, "unmaximize", Context.unmaximize, &ctx);
-    try w.bind(Context, "minimize", Context.minimize, &ctx);
-    try w.bind(Context, "unminimize", Context.unminimize, &ctx);
-    try w.bind(Context, "fullscreen", Context.fullscreen, &ctx);
-    try w.bind(Context, "unfullscreen", Context.unfullscreen, &ctx);
-    try w.bind(Context, "hide", Context.hide, &ctx);
-    try w.bind(Context, "show", Context.show, &ctx);
-    try w.bind(Context, "getState", Context.getState, &ctx);
+    try easy.bind(.maximize);
+    try easy.bind(.unmaximize);
+    try easy.bind(.minimize);
+    try easy.bind(.unminimize);
+    try easy.bind(.fullscreen);
+    try easy.bind(.unfullscreen);
+    try easy.bind(.hide);
+    try easy.bind(.show);
+    try easy.bind(.getState);
 
-    try w.setTitle("Window Example");
-    try w.setSize(480, 320, .none);
-    try w.setHtml(html);
-    try w.run();
+    try easy.setTitle("Window Example");
+    try easy.setSize(480, 320, .none);
+    try easy.setHtml(html);
+    try easy.run();
 }
