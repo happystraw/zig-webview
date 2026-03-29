@@ -463,6 +463,39 @@ pub const Webview = opaque {
                 pub fn rejectError(self: Request, err: anyerror) void {
                     self.easy.rejectError(self.id, err);
                 }
+
+                /// Duplicates this request using `allocator`, transferring ownership of
+                /// `id` and `args` to the caller.
+                ///
+                /// Use this when you need to defer the response beyond the callback's
+                /// lifetime (e.g. to respond from another thread).
+                ///
+                /// The returned `Request` must be freed with `deinit(allocator)` after
+                /// the Promise has been settled.
+                ///
+                /// **Only call `deinit` on requests returned by `dupe`.**
+                /// Calling it on the original callback-provided request is undefined behaviour.
+                pub fn dupe(self: Request, allocator: std.mem.Allocator) !Request {
+                    if (comptime @import("builtin").zig_version.minor >= 16) {
+                        return .{
+                            .id = try allocator.dupeSentinel(u8, self.id, 0),
+                            .args = try allocator.dupeSentinel(u8, self.args, 0),
+                            .easy = self.easy,
+                        };
+                    } else {
+                        return .{
+                            .id = try allocator.dupeZ(u8, self.id),
+                            .args = try allocator.dupeZ(u8, self.args),
+                            .easy = self.easy,
+                        };
+                    }
+                }
+
+                /// Frees the memory allocated by `dupe`.
+                pub fn deinit(self: Request, allocator: std.mem.Allocator) void {
+                    allocator.free(self.id);
+                    allocator.free(self.args);
+                }
             };
 
             w: *Webview,
