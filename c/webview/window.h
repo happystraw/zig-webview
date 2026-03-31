@@ -1,7 +1,7 @@
 #ifndef WEBVIEW_WINDOW_H
 #define WEBVIEW_WINDOW_H
 
-#include "webview/webview.h"
+#include <webview/webview.h>
 
 #if defined(__cplusplus)
 extern "C" {

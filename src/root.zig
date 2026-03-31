@@ -105,7 +105,11 @@ pub const Webview = opaque {
     pub fn create(debug: bool, window: ?*anyopaque) Error!*Webview {
         const w = c.webview_create(@intFromBool(debug), window);
         if (w == null) return Error.Unspecified;
-        if (@intFromPtr(w) < 0) return mapError(@intFromPtr(w));
+        const p: isize = @bitCast(@intFromPtr(w));
+        if (p < 0) {
+            try mapError(@intCast(p));
+            unreachable;
+        }
         return @ptrCast(w);
     }
 

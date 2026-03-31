@@ -1,4 +1,4 @@
-#include "webview/window.h"
+#include "window.h"
 
 /// Window state control functions
 
