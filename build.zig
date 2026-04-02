@@ -95,7 +95,15 @@ fn addLibrary(b: *std.Build, options: BuildOptions) *std.Build.Step.Compile {
         .root_module = mod,
         .linkage = .static,
     });
+
+    lib.installHeader(upstream.path("core/include/webview/api.h"), "webview/webview.h");
+    lib.installHeader(upstream.path("core/include/webview/errors.h"), "webview/errors.h");
+    lib.installHeader(upstream.path("core/include/webview/macros.h"), "webview/macros.h");
+    lib.installHeader(upstream.path("core/include/webview/types.h"), "webview/types.h");
+    lib.installHeader(b.path("c/webview/window.h"), "webview/window.h");
+
     b.installArtifact(lib);
+
     return lib;
 }
 
