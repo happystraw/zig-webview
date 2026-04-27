@@ -94,6 +94,7 @@ fn addLibrary(b: *std.Build, options: BuildOptions) *std.Build.Step.Compile {
         .name = "webview",
         .root_module = mod,
         .linkage = .static,
+        .use_llvm = true, // https://codeberg.org/ziglang/zig/issues/31272
     });
 
     lib.installHeader(upstream.path("core/include/webview/api.h"), "webview/webview.h");
@@ -123,7 +124,7 @@ fn addModule(b: *std.Build, options: BuildOptions, lib: *std.Build.Step.Compile)
 
 fn addTestStep(b: *std.Build, mod: *std.Build.Module) void {
     const test_step = b.step("test", "Run tests");
-    const mod_test = b.addTest(.{ .root_module = mod });
+    const mod_test = b.addTest(.{ .root_module = mod, .use_llvm = true });
     const run_mod_test = b.addRunArtifact(mod_test);
     test_step.dependOn(&run_mod_test.step);
 }
@@ -149,6 +150,7 @@ fn addExamplesStep(b: *std.Build, options: BuildOptions, mod: *std.Build.Module)
         const exe = b.addExecutable(.{
             .name = name,
             .root_module = example_mod,
+            .use_llvm = true,
         });
         const install = b.addInstallArtifact(exe, .{});
         examples_step.dependOn(&install.step);
