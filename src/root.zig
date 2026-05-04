@@ -708,4 +708,9 @@ test "version" {
     try std.testing.expectEqual(0, v.patch);
 }
 
+test {
+    std.testing.refAllDecls(Webview);
+    std.testing.refAllDecls(Webview.Easy(struct {}));
+}
+
 // TODO: more tests
