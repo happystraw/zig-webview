@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 
 /// Supported WebKitGTK versions for linking on Linux.
 pub const WebkitGtkVersion = enum {
@@ -8,17 +7,18 @@ pub const WebkitGtkVersion = enum {
     @"6.0",
 };
 
-/// Applies macOS SDK configuration for cross-compilation if suitable options are provided.
+/// Applies macOS SDK configuration if a custom SDK path is provided.
 ///
-/// Automatically configures system include paths, library paths, and framework paths
-/// when cross-compiling for macOS from non-macOS hosts.
+/// Configures system include paths, library paths, and framework paths
+/// against the specified SDK, useful both for cross-compilation and for
+/// targeting a specific SDK version on macOS hosts.
 pub fn tryApplyMacOsSdk(b: *std.Build, mod: *std.Build.Module, options: BuildOptions) void {
-    if (options.target.result.os.tag == .macos and builtin.os.tag != .macos and options.macos_sdk != null) {
-        const macos_sdk_path: std.Build.LazyPath = .{ .cwd_relative = options.macos_sdk.? };
+    if (options.target.result.os.tag == .macos) if (options.macos_sdk) |macos_sdk| {
+        const macos_sdk_path: std.Build.LazyPath = .{ .cwd_relative = macos_sdk };
         mod.addSystemIncludePath(macos_sdk_path.path(b, "usr/include"));
         mod.addLibraryPath(macos_sdk_path.path(b, "usr/lib"));
         mod.addSystemFrameworkPath(macos_sdk_path.path(b, "System/Library/Frameworks"));
-    }
+    };
 }
 
 const BuildOptions = struct {
@@ -32,7 +32,7 @@ pub fn build(b: *std.Build) void {
     const options: BuildOptions = .{
         .target = b.standardTargetOptions(.{}),
         .optimize = b.standardOptimizeOption(.{}),
-        .macos_sdk = b.option([]const u8, "macos-sdk", "Path to macOS SDK (optional), used on non-macOS platforms"),
+        .macos_sdk = b.option([]const u8, "macos-sdk", "Path to macOS SDK (optional)"),
         .webkitgtk = b.option(WebkitGtkVersion, "webkitgtk", "Version of WebKitGTK to link against (default: 4.1), Linux only") orelse .@"4.1",
     };
 
