@@ -1,0 +1,86 @@
+name: macOS Test
+
+on:
+  push:
+    branches: ["*"]
+    paths:
+      - "src/**"
+      - "examples/**"
+      - "c/**"
+      - "deps/**"
+      - "build.zig"
+      - "build.zig.zon"
+      - ".github/workflows/test-macos.yml"
+  pull_request:
+    branches: ["*"]
+    paths:
+      - "src/**"
+      - "examples/**"
+      - "c/**"
+      - "deps/**"
+      - "build.zig"
+      - "build.zig.zon"
+      - ".github/workflows/test-macos.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: test (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            os: macos-15-intel
+          - arch: aarch64
+            os: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: mlugg/setup-zig@v2
+
+      - name: Run tests
+        run: |
+          zig build test
+
+      - name: Cache macOS SDK
+        id: cache-macos-sdk
+        uses: actions/cache@v4
+        with:
+          path: MacOSX15.5.sdk
+          key: macos-sdk-15.5
+
+      - name: Download macOS SDK
+        if: steps.cache-macos-sdk.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://github.com/joseluisq/macosx-sdks/releases/download/15.5/MacOSX15.5.sdk.tar.xz | tar -xJ
+
+      - name: Run tests with explicit macOS SDK
+        run: |
+          zig build test -Dmacos-sdk=${{ github.workspace }}/MacOSX15.5.sdk
+
+      - name: Build examples
+        run: |
+          zig build examples
+
+      - name: Build examples (ReleaseSafe)
+        run: |
+          zig build examples -Doptimize=ReleaseSafe
+
+      - name: Build examples (ReleaseFast)
+        run: |
+          zig build examples -Doptimize=ReleaseFast
+
+      - name: Build examples (Cross-compile for Windows x86_64 ReleaseFast)
+        run: |
+          zig build examples -Dtarget=x86_64-windows -Doptimize=ReleaseFast
+
+      - name: Build examples (Cross-compile for macOS aarch64 ReleaseFast)
+        run: |
+          zig build examples -Dtarget=aarch64-macos -Dmacos-sdk=${{ github.workspace }}/MacOSX15.5.sdk -Doptimize=ReleaseFast
+
+      - name: Build examples (Cross-compile for macOS x86_64 ReleaseFast)
+        run: |
+          zig build examples -Dtarget=x86_64-macos -Dmacos-sdk=${{ github.workspace }}/MacOSX15.5.sdk -Doptimize=ReleaseFast
