@@ -49,8 +49,13 @@ fn addLibrary(b: *std.Build, options: BuildOptions) *std.Build.Step.Compile {
     const mod = b.createModule(.{
         .target = options.target,
         .optimize = options.optimize,
-        .link_libcpp = true,
     });
+    if (options.target.result.abi == .msvc) {
+        mod.link_libc = true;
+    } else {
+        mod.link_libcpp = true;
+    }
+
     mod.addIncludePath(upstream.path("core/include"));
     mod.addIncludePath(b.path("c"));
     mod.addCMacro("WEBVIEW_STATIC", "1");

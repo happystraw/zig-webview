@@ -46,7 +46,7 @@ pub const Webview = opaque {
     }
 
     /// Window size hints.
-    pub const Hint = enum(u32) {
+    pub const Hint = enum(c.webview_hint_t) {
         /// Width and height are default size.
         none = 0,
         /// Width and height are minimum bounds.
@@ -58,7 +58,7 @@ pub const Webview = opaque {
     };
 
     /// Native handle kind. The actual type depends on the backend.
-    pub const NativeHandleKind = enum(u32) {
+    pub const NativeHandleKind = enum(c.webview_native_handle_kind_t) {
         /// Top-level window. GtkWindow pointer (GTK), NSWindow pointer (Cocoa)
         /// or HWND (Win32).
         ui_window = 0,

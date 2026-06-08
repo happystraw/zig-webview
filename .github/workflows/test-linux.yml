@@ -19,11 +19,23 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.arch }}, ${{ matrix.zig }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+        zig: ["0.15.2", "0.16.0"]
+        include:
+          - arch: x86_64
+            os: ubuntu-latest
+          - arch: aarch64
+            os: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ matrix.zig }}
       - name: Install linux development libraries
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
