@@ -76,14 +76,26 @@ const Context = struct {
         const fs = try req.easy.isFullscreen();
         const visible = try req.easy.isVisible();
         var buf: [128]u8 = undefined;
-        const result = try std.fmt.bufPrintZ(&buf,
-            \\{{"maximized":{s},"minimized":{s},"fullscreen":{s},"visible":{s}}}
-        , .{
-            if (maximized) "true" else "false",
-            if (minimized) "true" else "false",
-            if (fs) "true" else "false",
-            if (visible) "true" else "false",
-        });
+
+        const result = if (comptime @import("builtin").zig_version.major == 0 and @import("builtin").zig_version.minor < 16)
+            try std.fmt.bufPrintZ(&buf,
+                \\{{"maximized":{s},"minimized":{s},"fullscreen":{s},"visible":{s}}}
+            , .{
+                if (maximized) "true" else "false",
+                if (minimized) "true" else "false",
+                if (fs) "true" else "false",
+                if (visible) "true" else "false",
+            })
+        else
+            try std.fmt.bufPrintSentinel(&buf,
+                \\{{"maximized":{s},"minimized":{s},"fullscreen":{s},"visible":{s}}}
+            , .{
+                if (maximized) "true" else "false",
+                if (minimized) "true" else "false",
+                if (fs) "true" else "false",
+                if (visible) "true" else "false",
+            }, 0);
+
         req.resolveWith(result);
     }
 };

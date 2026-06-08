@@ -30,7 +30,11 @@ const Context = struct {
         const delta = try std.fmt.parseInt(i64, req.args[1 .. req.args.len - 1], 10);
         self.num += delta;
         var buf: [32]u8 = undefined;
-        req.resolveWith(try std.fmt.bufPrintZ(&buf, "{d}", .{self.num}));
+        const result = if (comptime @import("builtin").zig_version.major == 0 and @import("builtin").zig_version.minor < 16)
+            try std.fmt.bufPrintZ(&buf, "{d}", .{self.num})
+        else
+            try std.fmt.bufPrintSentinel(&buf, "{d}", .{self.num}, 0);
+        req.resolveWith(result);
     }
 };
 

@@ -46,7 +46,7 @@ const Context = struct {
 
     fn respondError(self: *const Context, id: [:0]const u8, err: anyerror) !void {
         var buf: [128]u8 = undefined;
-        const result = try std.fmt.bufPrintZ(&buf, "\"{s}\"", .{@errorName(err)});
+        const result = try std.fmt.bufPrintSentinel(&buf, "\"{s}\"", .{@errorName(err)}, 0);
         try self.w.respond(id, .err, result);
     }
 
@@ -59,7 +59,7 @@ const Context = struct {
         const direction = try std.fmt.parseInt(i64, req[1 .. req.len - 1], 10);
         self.num += direction;
         var buf: [32]u8 = undefined;
-        const result = try std.fmt.bufPrintZ(&buf, "{d}", .{self.num});
+        const result = try std.fmt.bufPrintSentinel(&buf, "{d}", .{self.num}, 0);
         self.w.respond(id, .ok, result) catch return;
     }
 

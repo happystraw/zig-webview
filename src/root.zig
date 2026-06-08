@@ -480,16 +480,16 @@ pub const Webview = opaque {
                 /// **Only call `deinit` on requests returned by `dupe`.**
                 /// Calling it on the original callback-provided request is undefined behaviour.
                 pub fn dupe(self: Request, allocator: std.mem.Allocator) !Request {
-                    if (comptime @import("builtin").zig_version.minor >= 16) {
+                    if (comptime @import("builtin").zig_version.major == 0 and @import("builtin").zig_version.minor < 16) {
                         return .{
-                            .id = try allocator.dupeSentinel(u8, self.id, 0),
-                            .args = try allocator.dupeSentinel(u8, self.args, 0),
+                            .id = try allocator.dupeZ(u8, self.id),
+                            .args = try allocator.dupeZ(u8, self.args),
                             .easy = self.easy,
                         };
                     } else {
                         return .{
-                            .id = try allocator.dupeZ(u8, self.id),
-                            .args = try allocator.dupeZ(u8, self.args),
+                            .id = try allocator.dupeSentinel(u8, self.id, 0),
+                            .args = try allocator.dupeSentinel(u8, self.args, 0),
                             .easy = self.easy,
                         };
                     }
@@ -600,7 +600,10 @@ pub const Webview = opaque {
             /// Errors are logged via `log.err`.
             pub fn rejectError(self: *Self, id: [:0]const u8, err: anyerror) void {
                 var buf: [128]u8 = undefined;
-                const result = std.fmt.bufPrintZ(&buf, "\"{s}\"", .{@errorName(err)}) catch "\"Error occurred\"";
+                const result = if (comptime @import("builtin").zig_version.major == 0 and @import("builtin").zig_version.minor < 16)
+                    std.fmt.bufPrintZ(&buf, "\"{s}\"", .{@errorName(err)}) catch "\"Error occurred\""
+                else
+                    std.fmt.bufPrintSentinel(&buf, "\"{s}\"", .{@errorName(err)}, 0) catch "\"Error occurred\"";
                 self.respond(id, .err, result);
             }
 
