@@ -12,6 +12,9 @@ on:
     branches: ["*"]
     paths:
       - "src/**"
+      - "examples/**"
+      - "c/**"
+      - "deps/**"
       - "build.zig"
       - "build.zig.zon"
       - ".github/workflows/test-linux.yml"

@@ -197,6 +197,8 @@ WEBVIEW_API webview_error_t webview_window_unmaximize(webview_t w)
     if (!gtkwindow) return WEBVIEW_ERROR_INVALID_STATE;
     gtk_window_unmaximize(GTK_WINDOW(gtkwindow));
     return WEBVIEW_ERROR_OK;
+#else
+    return WEBVIEW_ERROR_UNSPECIFIED;
 #endif
 }
 
@@ -519,6 +521,7 @@ WEBVIEW_API webview_error_t webview_window_show(webview_t w)
 WEBVIEW_API webview_error_t webview_window_is_fullscreen(webview_t w, int *result)
 {
     if (!w || !result) return WEBVIEW_ERROR_INVALID_ARGUMENT;
+    *result = 0;
 
 #ifdef _WIN32
     HWND hwnd = (HWND)webview_get_window(w);
@@ -570,6 +573,7 @@ WEBVIEW_API webview_error_t webview_window_is_fullscreen(webview_t w, int *resul
 
 WEBVIEW_API webview_error_t webview_window_is_maximized(webview_t w, int *result) {
     if (!w || !result) return WEBVIEW_ERROR_INVALID_ARGUMENT;
+    *result = 0;
 
 #ifdef _WIN32
     HWND hwnd = (HWND)webview_get_window(w);
@@ -624,6 +628,7 @@ WEBVIEW_API webview_error_t webview_window_is_maximized(webview_t w, int *result
 WEBVIEW_API webview_error_t webview_window_is_minimized(webview_t w, int *result)
 {
     if (!w || !result) return WEBVIEW_ERROR_INVALID_ARGUMENT;
+    *result = 0;
 
 #ifdef _WIN32
     HWND hwnd = (HWND)webview_get_window(w);
@@ -677,6 +682,7 @@ WEBVIEW_API webview_error_t webview_window_is_minimized(webview_t w, int *result
 WEBVIEW_API webview_error_t webview_window_is_visible(webview_t w, int *result)
 {
     if (!w || !result) return WEBVIEW_ERROR_INVALID_ARGUMENT;
+    *result = 0;
 
 #ifdef _WIN32
     HWND hwnd = (HWND)webview_get_window(w);
