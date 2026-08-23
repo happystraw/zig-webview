@@ -5,6 +5,7 @@ on:
     branches: ["*"]
     paths:
       - "src/**"
+      - "test/**"
       - "examples/**"
       - "c/**"
       - "deps/**"
@@ -15,6 +16,7 @@ on:
     branches: ["*"]
     paths:
       - "src/**"
+      - "test/**"
       - "examples/**"
       - "c/**"
       - "deps/**"
@@ -42,6 +44,11 @@ jobs:
       - name: Run tests
         run: |
           zig build test -Dtarget=native-windows-${{ matrix.abi }}
+
+      - name: Run functional tests
+        timeout-minutes: 10
+        run: |
+          zig build functional-test -Dtarget=native-windows-${{ matrix.abi }}
 
       - name: Build examples
         run: |

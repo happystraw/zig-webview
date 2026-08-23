@@ -40,6 +40,7 @@ pub fn build(b: *std.Build) void {
     const mod = addModule(b, options, lib);
 
     addTestStep(b, mod);
+    addFunctionalTestStep(b, options, mod);
     addExamplesStep(b, options, mod);
     addDocStep(b, mod);
 }
@@ -128,6 +129,41 @@ fn addTestStep(b: *std.Build, mod: *std.Build.Module) void {
     const mod_test = b.addTest(.{ .root_module = mod, .use_llvm = true });
     const run_mod_test = b.addRunArtifact(mod_test);
     test_step.dependOn(&run_mod_test.step);
+}
+
+fn addFunctionalTestStep(b: *std.Build, options: BuildOptions, mod: *std.Build.Module) void {
+    const functional_test_step = b.step("functional-test", "Run functional tests with a real WebView");
+    const test_cases = [_]struct { name: []const u8, filter: []const u8 }{
+        .{ .name = "warm-up", .filter = "functional warm up WebView2" },
+        .{ .name = "lifecycle", .filter = "functional lifecycle and dispatch" },
+        .{ .name = "binding", .filter = "functional raw binding round trip and unbinding" },
+        .{ .name = "invalid-json", .filter = "functional binding rejects non JSON result" },
+        .{ .name = "navigation", .filter = "functional init script and navigation" },
+        .{ .name = "easy", .filter = "functional Easy binding success and error propagation" },
+    };
+
+    var previous_run: ?*std.Build.Step.Run = null;
+    for (test_cases) |test_case| {
+        const test_mod = b.createModule(.{
+            .root_source_file = b.path("test/functional.zig"),
+            .target = options.target,
+            .optimize = options.optimize,
+            .imports = &.{
+                .{ .name = "webview", .module = mod },
+            },
+        });
+        tryApplyMacOsSdk(b, test_mod, options);
+        const test_artifact = b.addTest(.{
+            .name = b.fmt("functional-test-{s}", .{test_case.name}),
+            .root_module = test_mod,
+            .filters = &.{test_case.filter},
+            .use_llvm = true,
+        });
+        const run_test = b.addRunArtifact(test_artifact);
+        if (previous_run) |previous| run_test.step.dependOn(&previous.step);
+        previous_run = run_test;
+    }
+    functional_test_step.dependOn(&previous_run.?.step);
 }
 
 fn addExamplesStep(b: *std.Build, options: BuildOptions, mod: *std.Build.Module) void {

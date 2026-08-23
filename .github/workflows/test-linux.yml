@@ -5,6 +5,7 @@ on:
     branches: ["*"]
     paths:
       - "src/**"
+      - "test/**"
       - "build.zig"
       - "build.zig.zon"
       - ".github/workflows/test-linux.yml"
@@ -12,6 +13,7 @@ on:
     branches: ["*"]
     paths:
       - "src/**"
+      - "test/**"
       - "examples/**"
       - "c/**"
       - "deps/**"
@@ -42,11 +44,15 @@ jobs:
       - name: Install linux development libraries
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: libgtk-3-dev libwebkit2gtk-4.1-dev
+          packages: libgtk-3-dev libwebkit2gtk-4.1-dev xvfb xauth
           version: 1.0
       - name: Run tests
         run: |
           zig build test
+      - name: Run functional tests
+        timeout-minutes: 10
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" zig build functional-test
       - name: Build examples
         run: |
           zig build examples
