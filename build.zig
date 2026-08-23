@@ -114,14 +114,10 @@ fn addLibrary(b: *std.Build, options: BuildOptions) *std.Build.Step.Compile {
 }
 
 fn addModule(b: *std.Build, options: BuildOptions, lib: *std.Build.Step.Compile) *std.Build.Module {
-    const webview_c = addCBindings(b, options);
     const mod = b.addModule("webview", .{
         .root_source_file = b.path("src/root.zig"),
         .target = options.target,
         .optimize = options.optimize,
-        .imports = &.{
-            .{ .name = "webview_c", .module = webview_c },
-        },
     });
     mod.linkLibrary(lib);
     return mod;
@@ -174,17 +170,4 @@ fn addDocStep(b: *std.Build, mod: *std.Build.Module) void {
         .install_subdir = "doc",
     });
     doc_step.dependOn(&install_doc.step);
-}
-
-fn addCBindings(b: *std.Build, options: BuildOptions) *std.Build.Module {
-    const upstream = b.dependency("upstream", .{});
-    const translate = b.addTranslateC(.{
-        .root_source_file = b.path("c/webview/all.h"),
-        .target = options.target,
-        .optimize = options.optimize,
-    });
-    translate.addIncludePath(upstream.path("core/include"));
-    translate.addIncludePath(b.path("c"));
-    translate.defineCMacro("WEBVIEW_STATIC", "1");
-    return translate.createModule();
 }

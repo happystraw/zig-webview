@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const c = @import("c.zig").c;
+const builtin = @import("builtin");
 
 /// Zig binding for [webview/webview](https://github.com/webview/webview): a native window
 /// with an embedded browser widget for building desktop UIs with web technologies.
@@ -32,45 +32,11 @@ pub const Webview = opaque {
         /// Signifies that something does not exist.
         NotFound,
     };
-    inline fn mapError(err: c.webview_error_t) Error!void {
-        switch (err) {
-            c.WEBVIEW_ERROR_OK => {},
-            c.WEBVIEW_ERROR_MISSING_DEPENDENCY => return Error.MissingDependency,
-            c.WEBVIEW_ERROR_CANCELED => return Error.Canceled,
-            c.WEBVIEW_ERROR_INVALID_STATE => return Error.InvalidState,
-            c.WEBVIEW_ERROR_INVALID_ARGUMENT => return Error.InvalidArgument,
-            c.WEBVIEW_ERROR_DUPLICATE => return Error.Duplicate,
-            c.WEBVIEW_ERROR_NOT_FOUND => return Error.NotFound,
-            else => return Error.Unspecified,
-        }
-    }
 
     /// Window size hints.
-    pub const Hint = enum(c.webview_hint_t) {
-        /// Width and height are default size.
-        none = 0,
-        /// Width and height are minimum bounds.
-        min = 1,
-        /// Width and height are maximum bounds.
-        max = 2,
-        /// Window size can not be changed by a user.
-        fixed = 3,
-    };
-
+    pub const Hint = ffi.webview_hint_t;
     /// Native handle kind. The actual type depends on the backend.
-    pub const NativeHandleKind = enum(c.webview_native_handle_kind_t) {
-        /// Top-level window. GtkWindow pointer (GTK), NSWindow pointer (Cocoa)
-        /// or HWND (Win32).
-        ui_window = 0,
-        /// Browser widget. GtkWidget pointer (GTK), NSView pointer (Cocoa) or
-        /// HWND (Win32).
-        ui_widget = 1,
-        /// Browser controller. WebKitWebView pointer (WebKitGTK), WKWebView
-        /// pointer (Cocoa/WebKit) or ICoreWebView2Controller pointer
-        /// (Win32/WebView2).
-        browser_controller = 2,
-    };
-
+    pub const NativeHandleKind = ffi.webview_native_handle_kind_t;
     /// Holds the elements of a MAJOR.MINOR.PATCH version number.
     pub const Version = struct {
         /// Major version.
@@ -80,16 +46,6 @@ pub const Webview = opaque {
         /// Patch version.
         patch: u32,
     };
-
-    /// Converts a C webview_t pointer to a *Webview.
-    pub inline fn from(w: c.webview_t) *Webview {
-        return @ptrCast(w.?);
-    }
-
-    /// Returns the underlying C webview_t pointer.
-    pub inline fn ptr(self: *Webview) c.webview_t {
-        return @ptrCast(self);
-    }
 
     /// Creates a new webview instance.
     ///
@@ -101,32 +57,25 @@ pub const Webview = opaque {
     ///   null, a new window is created and both the window and application
     ///   lifecycle are managed by the webview instance.
     ///
-    /// Returns `Error.MissingDependency` if WebView2 is unavailable on Windows.
+    /// Returns `Error.Unspecified` if creation fails.
     pub fn create(debug: bool, window: ?*anyopaque) Error!*Webview {
-        const w = c.webview_create(@intFromBool(debug), window);
-        if (w == null) return Error.Unspecified;
-        const p: isize = @bitCast(@intFromPtr(w));
-        if (p < 0) {
-            try mapError(@intCast(p));
-            unreachable;
-        }
-        return @ptrCast(w);
+        return ffi.webview_create(@intFromBool(debug), window) orelse error.Unspecified;
     }
 
     /// Destroys a webview instance and closes the native window.
     pub fn destroy(self: *Webview) Error!void {
-        return mapError(c.webview_destroy(self.ptr()));
+        return ffi.webview_destroy(self).toError();
     }
 
     /// Runs the main loop until it's terminated.
     pub fn run(self: *Webview) Error!void {
-        return mapError(c.webview_run(self.ptr()));
+        return ffi.webview_run(self).toError();
     }
 
     /// Stops the main loop. It is safe to call this function from another
     /// background thread.
     pub fn terminate(self: *Webview) Error!void {
-        return mapError(c.webview_terminate(self.ptr()));
+        return ffi.webview_terminate(self).toError();
     }
 
     /// Schedules a function to be invoked on the thread with the run/event loop.
@@ -142,11 +91,11 @@ pub const Webview = opaque {
         arg: ?*anyopaque,
     ) Error!void {
         const S = struct {
-            fn cb(w: c.webview_t, a: ?*anyopaque) callconv(.c) void {
-                callback(.from(w), a);
+            fn cb(w: *Webview, a: ?*anyopaque) callconv(.c) void {
+                callback(w, a);
             }
         };
-        return mapError(c.webview_dispatch(self.ptr(), S.cb, arg));
+        return ffi.webview_dispatch(self, S.cb, arg).toError();
     }
 
     fn DispatchCallbackType(comptime T: type) type {
@@ -170,11 +119,11 @@ pub const Webview = opaque {
         arg: *ArgType,
     ) Error!void {
         const S = struct {
-            fn cb(w: c.webview_t, a: ?*anyopaque) callconv(.c) void {
-                callback(@ptrCast(@alignCast(a.?)), .from(w));
+            fn cb(w: *Webview, a: ?*anyopaque) callconv(.c) void {
+                callback(@ptrCast(@alignCast(a.?)), w);
             }
         };
-        return mapError(c.webview_dispatch(self.ptr(), S.cb, @ptrCast(arg)));
+        return ffi.webview_dispatch(self, S.cb, @ptrCast(arg)).toError();
     }
 
     /// Schedules a function to be invoked on the thread with the run/event loop,
@@ -184,28 +133,28 @@ pub const Webview = opaque {
         callback: DispatchCallbackType(void),
     ) Error!void {
         const S = struct {
-            fn cb(w: c.webview_t, _: ?*anyopaque) callconv(.c) void {
-                callback(.from(w));
+            fn cb(w: *Webview, _: ?*anyopaque) callconv(.c) void {
+                callback(w);
             }
         };
-        return mapError(c.webview_dispatch(self.ptr(), S.cb, null));
+        return ffi.webview_dispatch(self, S.cb, null).toError();
     }
 
     /// Returns the native handle of the window associated with the webview
     /// instance. The handle can be a GtkWindow pointer (GTK), NSWindow pointer
     /// (Cocoa) or HWND (Win32).
     pub fn getWindow(self: *Webview) ?*anyopaque {
-        return c.webview_get_window(self.ptr());
+        return ffi.webview_get_window(self);
     }
 
     /// Get a native handle of choice.
     pub fn getNativeHandle(self: *Webview, comptime kind: NativeHandleKind) ?*anyopaque {
-        return c.webview_get_native_handle(self.ptr(), @intFromEnum(kind));
+        return ffi.webview_get_native_handle(self, kind);
     }
 
     /// Updates the title of the native window.
     pub fn setTitle(self: *Webview, title: [:0]const u8) Error!void {
-        return mapError(c.webview_set_title(self.ptr(), title.ptr));
+        return ffi.webview_set_title(self, title.ptr).toError();
     }
 
     /// Updates the size of the native window.
@@ -218,7 +167,7 @@ pub const Webview = opaque {
     ///   gtk_window_set_geometry_hints were removed. This option has no effect
     ///   when using GTK 4.
     pub fn setSize(self: *Webview, width: i32, height: i32, hint: Hint) Error!void {
-        return mapError(c.webview_set_size(self.ptr(), width, height, @intFromEnum(hint)));
+        return ffi.webview_set_size(self, width, height, hint).toError();
     }
 
     /// Navigates webview to the given URL. URL may be a properly encoded data URI.
@@ -230,27 +179,27 @@ pub const Webview = opaque {
     /// try w.navigate("data:text/html;base64,PGgxPkhlbGxvPC9oMT4=");
     /// ```
     pub fn navigate(self: *Webview, url: [:0]const u8) Error!void {
-        return mapError(c.webview_navigate(self.ptr(), url.ptr));
+        return ffi.webview_navigate(self, url.ptr).toError();
     }
 
     /// Load HTML content into the webview.
     ///
     /// Example: `try w.setHtml("<h1>Hello</h1>");`
     pub fn setHtml(self: *Webview, html: [:0]const u8) Error!void {
-        return mapError(c.webview_set_html(self.ptr(), html.ptr));
+        return ffi.webview_set_html(self, html.ptr).toError();
     }
 
     /// Injects JavaScript code to be executed immediately upon loading a page.
     /// The code will be executed before `window.onload`.
     pub fn addInitScript(self: *Webview, js: [:0]const u8) Error!void {
-        return mapError(c.webview_init(self.ptr(), js.ptr));
+        return ffi.webview_init(self, js.ptr).toError();
     }
 
     /// Evaluates arbitrary JavaScript code.
     ///
     /// Use bindings if you need to communicate the result of the evaluation.
     pub fn eval(self: *Webview, js: [:0]const u8) Error!void {
-        return mapError(c.webview_eval(self.ptr(), js.ptr));
+        return ffi.webview_eval(self, js.ptr).toError();
     }
 
     /// Binds a function to a new global JavaScript function.
@@ -271,11 +220,11 @@ pub const Webview = opaque {
         arg: ?*anyopaque,
     ) Error!void {
         const S = struct {
-            fn cb(id: [*c]const u8, req: [*c]const u8, a: ?*anyopaque) callconv(.c) void {
+            fn cb(id: [*:0]const u8, req: [*:0]const u8, a: ?*anyopaque) callconv(.c) void {
                 callback(std.mem.span(id), std.mem.span(req), a);
             }
         };
-        return mapError(c.webview_bind(self.ptr(), name.ptr, S.cb, arg));
+        return ffi.webview_bind(self, name.ptr, S.cb, arg).toError();
     }
 
     fn BindCallbackType(comptime T: type) type {
@@ -301,11 +250,11 @@ pub const Webview = opaque {
         arg: *T,
     ) Error!void {
         const S = struct {
-            fn cb(id: [*c]const u8, req: [*c]const u8, a: ?*anyopaque) callconv(.c) void {
+            fn cb(id: [*:0]const u8, req: [*:0]const u8, a: ?*anyopaque) callconv(.c) void {
                 callback(@ptrCast(@alignCast(a.?)), std.mem.span(id), std.mem.span(req));
             }
         };
-        return mapError(c.webview_bind(self.ptr(), name.ptr, S.cb, @ptrCast(arg)));
+        return ffi.webview_bind(self, name.ptr, S.cb, @ptrCast(arg)).toError();
     }
 
     /// Binds a function to a new global JavaScript function without a user-provided argument.
@@ -317,18 +266,18 @@ pub const Webview = opaque {
         callback: BindCallbackType(void),
     ) Error!void {
         const S = struct {
-            fn cb(id: [*c]const u8, req: [*c]const u8, _: ?*anyopaque) callconv(.c) void {
+            fn cb(id: [*:0]const u8, req: [*:0]const u8, _: ?*anyopaque) callconv(.c) void {
                 callback(std.mem.span(id), std.mem.span(req));
             }
         };
-        return mapError(c.webview_bind(self.ptr(), name.ptr, S.cb, null));
+        return ffi.webview_bind(self, name.ptr, S.cb, null).toError();
     }
 
     /// Removes a binding created with `bind`.
     ///
     /// Returns `Error.NotFound` if no binding exists with the specified name.
     pub fn unbind(self: *Webview, name: [:0]const u8) Error!void {
-        return mapError(c.webview_unbind(self.ptr(), name.ptr));
+        return ffi.webview_unbind(self, name.ptr).toError();
     }
 
     pub const Status = enum(i32) {
@@ -349,80 +298,80 @@ pub const Webview = opaque {
     ///   side. This must either be a valid JSON value or an empty string for
     ///   the primitive JS value `undefined`.
     pub fn respond(self: *Webview, id: [:0]const u8, status: Status, result: [:0]const u8) Error!void {
-        return mapError(c.webview_return(self.ptr(), id.ptr, @intFromEnum(status), result.ptr));
+        return ffi.webview_return(self, id.ptr, @intFromEnum(status), result.ptr).toError();
     }
 
     /// Maximizes the native window.
     pub fn maximize(self: *Webview) Error!void {
-        return mapError(c.webview_window_maximize(self.ptr()));
+        return ffi.webview_window_maximize(self).toError();
     }
 
     /// Unmaximizes the native window.
     pub fn unmaximize(self: *Webview) Error!void {
-        return mapError(c.webview_window_unmaximize(self.ptr()));
+        return ffi.webview_window_unmaximize(self).toError();
     }
 
     /// Minimizes the native window.
     pub fn minimize(self: *Webview) Error!void {
-        return mapError(c.webview_window_minimize(self.ptr()));
+        return ffi.webview_window_minimize(self).toError();
     }
 
     /// Unminimizes the native window.
     pub fn unminimize(self: *Webview) Error!void {
-        return mapError(c.webview_window_unminimize(self.ptr()));
+        return ffi.webview_window_unminimize(self).toError();
     }
 
     /// Enters fullscreen mode.
     pub fn fullscreen(self: *Webview) Error!void {
-        return mapError(c.webview_window_fullscreen(self.ptr()));
+        return ffi.webview_window_fullscreen(self).toError();
     }
 
     /// Exits fullscreen mode.
     pub fn unfullscreen(self: *Webview) Error!void {
-        return mapError(c.webview_window_unfullscreen(self.ptr()));
+        return ffi.webview_window_unfullscreen(self).toError();
     }
 
     /// Hides the native window.
     pub fn hide(self: *Webview) Error!void {
-        return mapError(c.webview_window_hide(self.ptr()));
+        return ffi.webview_window_hide(self).toError();
     }
 
     /// Shows the native window.
     pub fn show(self: *Webview) Error!void {
-        return mapError(c.webview_window_show(self.ptr()));
+        return ffi.webview_window_show(self).toError();
     }
 
     /// Returns whether the native window is in fullscreen mode.
     pub fn isFullscreen(self: *Webview) Error!bool {
         var result: c_int = 0;
-        try mapError(c.webview_window_is_fullscreen(self.ptr(), &result));
+        try ffi.webview_window_is_fullscreen(self, &result).toError();
         return result != 0;
     }
 
     /// Returns whether the native window is maximized.
     pub fn isMaximized(self: *Webview) Error!bool {
         var result: c_int = 0;
-        try mapError(c.webview_window_is_maximized(self.ptr(), &result));
+        try ffi.webview_window_is_maximized(self, &result).toError();
         return result != 0;
     }
 
     /// Returns whether the native window is minimized.
     pub fn isMinimized(self: *Webview) Error!bool {
         var result: c_int = 0;
-        try mapError(c.webview_window_is_minimized(self.ptr(), &result));
+        try ffi.webview_window_is_minimized(self, &result).toError();
         return result != 0;
     }
 
     /// Returns whether the native window is visible.
     pub fn isVisible(self: *Webview) Error!bool {
         var result: c_int = 0;
-        try mapError(c.webview_window_is_visible(self.ptr(), &result));
+        try ffi.webview_window_is_visible(self, &result).toError();
         return result != 0;
     }
 
     /// Get the library's version information.
     pub fn version() Version {
-        const info = c.webview_version().*;
+        const info = ffi.webview_version().*;
         return .{
             .major = info.version.major,
             .minor = info.version.minor,
@@ -480,7 +429,7 @@ pub const Webview = opaque {
                 /// **Only call `deinit` on requests returned by `dupe`.**
                 /// Calling it on the original callback-provided request is undefined behaviour.
                 pub fn dupe(self: Request, allocator: std.mem.Allocator) !Request {
-                    if (comptime @import("builtin").zig_version.major == 0 and @import("builtin").zig_version.minor < 16) {
+                    if (comptime builtin.zig_version.major == 0 and builtin.zig_version.minor < 16) {
                         return .{
                             .id = try allocator.dupeZ(u8, self.id),
                             .args = try allocator.dupeZ(u8, self.args),
@@ -600,7 +549,7 @@ pub const Webview = opaque {
             /// Errors are logged via `log.err`.
             pub fn rejectError(self: *Self, id: [:0]const u8, err: anyerror) void {
                 var buf: [128]u8 = undefined;
-                const result = if (comptime @import("builtin").zig_version.major == 0 and @import("builtin").zig_version.minor < 16)
+                const result = if (comptime builtin.zig_version.major == 0 and builtin.zig_version.minor < 16)
                     std.fmt.bufPrintZ(&buf, "\"{s}\"", .{@errorName(err)}) catch "\"Error occurred\""
                 else
                     std.fmt.bufPrintSentinel(&buf, "\"{s}\"", .{@errorName(err)}, 0) catch "\"Error occurred\"";
@@ -689,27 +638,105 @@ pub const Webview = opaque {
     }
 };
 
-test "checkError: known errors" {
-    const t = std.testing;
-    try t.expectError(error.MissingDependency, Webview.mapError(c.WEBVIEW_ERROR_MISSING_DEPENDENCY));
-    try t.expectError(error.Canceled, Webview.mapError(c.WEBVIEW_ERROR_CANCELED));
-    try t.expectError(error.InvalidState, Webview.mapError(c.WEBVIEW_ERROR_INVALID_STATE));
-    try t.expectError(error.InvalidArgument, Webview.mapError(c.WEBVIEW_ERROR_INVALID_ARGUMENT));
-    try t.expectError(error.Duplicate, Webview.mapError(c.WEBVIEW_ERROR_DUPLICATE));
-    try t.expectError(error.NotFound, Webview.mapError(c.WEBVIEW_ERROR_NOT_FOUND));
-}
+const ffi = struct {
+    const is_msvc_abi = builtin.abi == .msvc;
 
-test "checkError: unknown code falls back to Unspecified" {
-    try std.testing.expectError(error.Unspecified, Webview.mapError(c.WEBVIEW_ERROR_UNSPECIFIED));
-    try std.testing.expectError(error.Unspecified, Webview.mapError(99));
-}
+    const webview_error_t = enum(c_int) {
+        missing_dependency = -5,
+        canceled = -4,
+        invalid_state = -3,
+        invalid_argument = -2,
+        unspecified = -1,
+        ok = 0,
+        duplicate = 1,
+        not_found = 2,
+        _,
 
-test "version" {
-    const v = Webview.version();
-    try std.testing.expectEqual(0, v.major);
-    try std.testing.expectEqual(12, v.minor);
-    try std.testing.expectEqual(0, v.patch);
-}
+        fn toError(err: webview_error_t) Webview.Error!void {
+            switch (err) {
+                .ok => {},
+                .missing_dependency => return error.MissingDependency,
+                .canceled => return error.Canceled,
+                .invalid_state => return error.InvalidState,
+                .invalid_argument => return error.InvalidArgument,
+                .duplicate => return error.Duplicate,
+                .not_found => return error.NotFound,
+                else => return error.Unspecified,
+            }
+        }
+    };
+
+    const webview_version_t = extern struct {
+        major: c_uint,
+        minor: c_uint,
+        patch: c_uint,
+    };
+    const webview_version_info_t = extern struct {
+        version: webview_version_t,
+        version_number: [32]u8,
+        pre_release: [48]u8,
+        build_metadata: [48]u8,
+    };
+
+    /// Native handle kind. The actual type depends on the backend.
+    const webview_native_handle_kind_t = enum(if (is_msvc_abi) c_int else c_uint) {
+        /// Top-level window. GtkWindow pointer (GTK), NSWindow pointer (Cocoa)
+        /// or HWND (Win32).
+        ui_window = 0,
+        /// Browser widget. GtkWidget pointer (GTK), NSView pointer (Cocoa) or
+        /// HWND (Win32).
+        ui_widget = 1,
+        /// Browser controller. WebKitWebView pointer (WebKitGTK), WKWebView
+        /// pointer (Cocoa/WebKit) or ICoreWebView2Controller pointer
+        /// (Win32/WebView2).
+        browser_controller = 2,
+        _,
+    };
+
+    /// Window size hints.
+    const webview_hint_t = enum(if (is_msvc_abi) c_int else c_uint) {
+        /// Width and height are default size.
+        none = 0,
+        /// Width and height are minimum bounds.
+        min = 1,
+        /// Width and height are maximum bounds.
+        max = 2,
+        /// Window size can not be changed by a user.
+        fixed = 3,
+        _,
+    };
+
+    extern fn webview_create(debug: c_int, window: ?*anyopaque) ?*Webview;
+    extern fn webview_destroy(w: *Webview) webview_error_t;
+    extern fn webview_run(w: *Webview) webview_error_t;
+    extern fn webview_terminate(w: *Webview) webview_error_t;
+    extern fn webview_dispatch(w: *Webview, @"fn": *const fn (w: *Webview, arg: ?*anyopaque) callconv(.c) void, arg: ?*anyopaque) webview_error_t;
+    extern fn webview_get_window(w: *Webview) ?*anyopaque;
+    extern fn webview_get_native_handle(w: *Webview, kind: webview_native_handle_kind_t) ?*anyopaque;
+    extern fn webview_set_title(w: *Webview, title: [*:0]const u8) webview_error_t;
+    extern fn webview_set_size(w: *Webview, width: c_int, height: c_int, hints: webview_hint_t) webview_error_t;
+    extern fn webview_navigate(w: *Webview, url: [*:0]const u8) webview_error_t;
+    extern fn webview_set_html(w: *Webview, html: [*:0]const u8) webview_error_t;
+    extern fn webview_init(w: *Webview, js: [*:0]const u8) webview_error_t;
+    extern fn webview_eval(w: *Webview, js: [*:0]const u8) webview_error_t;
+    extern fn webview_bind(w: *Webview, name: [*:0]const u8, @"fn": *const fn (id: [*:0]const u8, req: [*:0]const u8, arg: ?*anyopaque) callconv(.c) void, arg: ?*anyopaque) webview_error_t;
+    extern fn webview_unbind(w: *Webview, name: [*:0]const u8) webview_error_t;
+    extern fn webview_return(w: *Webview, id: [*:0]const u8, status: c_int, result: [*:0]const u8) webview_error_t;
+    extern fn webview_version() *const webview_version_info_t;
+
+    extern fn webview_window_maximize(w: *Webview) webview_error_t;
+    extern fn webview_window_minimize(w: *Webview) webview_error_t;
+    extern fn webview_window_unmaximize(w: *Webview) webview_error_t;
+    extern fn webview_window_unminimize(w: *Webview) webview_error_t;
+    extern fn webview_window_fullscreen(w: *Webview) webview_error_t;
+    extern fn webview_window_unfullscreen(w: *Webview) webview_error_t;
+    extern fn webview_window_hide(w: *Webview) webview_error_t;
+    extern fn webview_window_show(w: *Webview) webview_error_t;
+    extern fn webview_window_is_fullscreen(w: *Webview, result: *c_int) webview_error_t;
+    extern fn webview_window_is_maximized(w: *Webview, result: *c_int) webview_error_t;
+    extern fn webview_window_is_minimized(w: *Webview, result: *c_int) webview_error_t;
+    extern fn webview_window_is_visible(w: *Webview, result: *c_int) webview_error_t;
+};
 
 test {
     std.testing.refAllDecls(Webview);

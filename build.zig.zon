@@ -1,6 +1,6 @@
 .{
     .name = .webview,
-    .version = "0.0.0",
+    .version = "0.1.0",
     .minimum_zig_version = "0.15.2",
     .fingerprint = 0xd0d1ff8d1cf1039a,
     .dependencies = .{

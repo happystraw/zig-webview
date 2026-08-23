@@ -35,7 +35,7 @@ jobs:
           - arch: x86_64
             os: macos-15-intel
           - arch: aarch64
-            os: macos-latest
+            os: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v4

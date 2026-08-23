@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Webview = @import("webview").Webview;
 
 const html: [:0]const u8 =
@@ -77,7 +78,7 @@ const Context = struct {
         const visible = try req.easy.isVisible();
         var buf: [128]u8 = undefined;
 
-        const result = if (comptime @import("builtin").zig_version.major == 0 and @import("builtin").zig_version.minor < 16)
+        const result = if (comptime builtin.zig_version.major == 0 and builtin.zig_version.minor < 16)
             try std.fmt.bufPrintZ(&buf,
                 \\{{"maximized":{s},"minimized":{s},"fullscreen":{s},"visible":{s}}}
             , .{
