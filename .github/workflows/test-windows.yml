@@ -32,7 +32,7 @@ jobs:
     strategy:
       matrix:
         abi: [gnu, msvc]
-        zig: ["0.15.2", "0.16.0"]
+        zig: ["0.15.2", "0.16.0", "0.17.0"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
